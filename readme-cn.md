@@ -4,9 +4,10 @@
 
 一个 harness 实验，不是 2048 bot。
 
-本仓库就是上游 [2048](https://github.com/gabrielecirulli/2048) 游戏（见
-[README-2048.md](README-2048.md)），在它之上用 `jev-lab/` 搭了一个实验。游戏没有被重写，
-它的文件一行未改；实验从外部驱动它，走渲染后的 DOM 和键盘，完全按人的方式来。
+游戏是 Gabriele Cirulli 的上游 [2048](https://github.com/gabrielecirulli/2048)，MIT 许可，
+原样保留 —— 它自己的署名见 [LICENSE.txt](LICENSE.txt) 和
+[README-2048.md](README-2048.md)。`jev-lab/` 下面才是加在上面的实验：它没有重写游戏，
+也没有改动游戏的文件，而是从外部驱动它，走渲染后的 DOM 和键盘，完全按人的方式来。
 
 模型始终不变。这里每个 jev 模式用的都是同一个模型、同一个 endpoint、同一段 rules 文本、
 同一组四个候选标签。唯一变化的是 **harness 给它看什么**：

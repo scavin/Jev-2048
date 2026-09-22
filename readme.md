@@ -4,9 +4,10 @@
 
 A harness experiment, not a 2048 bot.
 
-This repository is the upstream [2048](https://github.com/gabrielecirulli/2048) game (see
-[README-2048.md](README-2048.md)) with an experiment built on top of it, in `jev-lab/`. The
-game is not reimplemented and its files are untouched; the lab drives it from the outside,
+The game is the upstream [2048](https://github.com/gabrielecirulli/2048) by Gabriele Cirulli,
+MIT-licensed and kept as-is — its own credits are in [LICENSE.txt](LICENSE.txt) and
+[README-2048.md](README-2048.md). Everything under `jev-lab/` is the experiment added on top:
+it does not reimplement the game and does not touch its files, and drives it from the outside,
 through the rendered DOM and the keyboard, exactly as a human would.
 
 The model never changes. Every jev mode in here is the same model, the same endpoint, the
