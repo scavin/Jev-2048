@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jev-lab dashboard</title>
+<link rel="stylesheet" href="/dashboard.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>jev-lab</h1>
+  <div class="topbar-right">
+    <span class="status" id="status-chip" data-status="unknown">--</span>
+    <span class="note" id="conn-note" hidden>connection lost</span>
+    <a class="game-url" id="game-url" href="__GAME_URL__" target="_blank" rel="noreferrer">__GAME_URL__</a>
+  </div>
+</header>
+
+<div class="banner" id="banner" hidden>waiting for a runner</div>
+
+<main class="columns">
+  <section class="col col-left">
+    <figure class="screen">
+      <img id="live" alt="screenshot of the live 2048 window" decoding="async">
+      <figcaption id="live-note">no screenshot yet</figcaption>
+    </figure>
+    <div class="board" id="board" aria-label="board"></div>
+  </section>
+
+  <section class="col col-right">
+    <div class="card">
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Jev Decision</h2>
+        <span class="chosen-inline" id="chosen"></span>
+      </div>
+      <div id="decision"></div>
+    </div>
+
+    <div class="card">
+      <h2>Recent Moves</h2>
+      <div id="moves"></div>
+    </div>
+
+    <div class="card">
+      <h2>Failure Detection</h2>
+      <div id="failures"></div>
+    </div>
+
+    <div class="card" id="features-card" hidden>
+      <h2>Move Features</h2>
+      <div id="features"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="controls">
+  <button type="button" id="btn-start" class="btn btn-primary">Start</button>
+  <button type="button" id="btn-pause" class="btn">Pause</button>
+  <button type="button" id="btn-step" class="btn">Step</button>
+  <button type="button" id="btn-reset" class="btn btn-danger">Reset</button>
+  <label class="speed">
+    speed
+    <select id="speed">
+      <option value="1">1x</option>
+      <option value="5" selected>5x</option>
+      <option value="20">20x</option>
+      <option value="max">Max</option>
+    </select>
+  </label>
+  <span class="control-status" id="control-status">--</span>
+</footer>
+
+<script src="/dashboard.js"></script>
+</body>
+</html>

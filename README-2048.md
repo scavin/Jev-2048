@@ -1,3 +1,6 @@
+> This is the upstream 2048 game's own readme, kept for reference. The experiment built on
+> top of this game is documented in [readme.md](readme.md) ([中文](readme-cn.md)).
+
 # 2048
 A small clone of [1024](https://play.google.com/store/apps/details?id=com.veewo.a1024), based on [Saming's 2048](http://saming.fr/p/2048/) (also a clone). 2048 was indirectly inspired by [Threes](https://asherv.com/threes/).
 

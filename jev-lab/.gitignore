@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+
+# Runtime artifacts of the live panel, rewritten on every step.
+ui/live_state.json
+ui/live.jpg
+ui/control.json
+
+# Per-step logs from new runs stay local. The three logs behind the published results are
+# committed gzipped, because every number in the report is derived from them.
+logs/*.jsonl
