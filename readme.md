@@ -10,6 +10,10 @@ MIT-licensed and kept as-is — its own credits are in [LICENSE.txt](LICENSE.txt
 it does not reimplement the game and does not touch its files, and drives it from the outside,
 through the rendered DOM and the keyboard, exactly as a human would.
 
+The brief this was built against is kept in [prompt.md](prompt.md) (Chinese): it is what the
+repository is answering, and it is worth reading next to §10 to see what was asked for and
+what the data actually said.
+
 The model never changes. Every jev mode in here is the same model, the same endpoint, the
 same rules text and the same four candidate labels. The only thing that changes is **what
 the harness shows it**:
@@ -657,6 +661,7 @@ experiment recovered it.
 .                          the upstream 2048 game (index.html, js/, style/, meta/)
 ├── readme.md              this file            readme-cn.md  the Chinese version
 ├── README-2048.md         the upstream game's own readme
+├── prompt.md              the brief this experiment was built against (Chinese)
 ├── laya-test/             existing control code the lab reuses:
 │                            game_client.py    black-box page client (DOM + localStorage)
 │                            reference2048.py  independent rules engine, used as the simulator
