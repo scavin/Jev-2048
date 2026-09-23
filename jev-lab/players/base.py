@@ -11,9 +11,13 @@ import labpaths  # noqa: F401
 
 @dataclass
 class DecisionContext:
-    """What a policy is allowed to look at, assembled once per step by the runner."""
+    """What a policy is allowed to look at, assembled once per step by the runner.
 
-    mode: str
+    `design` is the experiment's variable — which state the harness hands over. The model is
+    the other axis and lives on the policy, not here.
+    """
+
+    design: str
     board: list
     score: int
     step: int
@@ -70,9 +74,10 @@ class Decision:
 
 
 class Player:
-    """Base policy. `uses_jev` marks the four modes whose decisions cost a network call."""
+    """Base policy. `model` is "jev", "laya", or "none" for the deterministic baselines."""
 
     name = "player"
+    model = "none"
     uses_jev = False
 
     def __init__(self, seed=0):

@@ -2,8 +2,8 @@
 
 import labpaths  # noqa: F401
 
-from players.jev_player import JevPlayer
+from players.laya_player import LayaPlayer
 
 
-class JevFeaturesPlayer(JevPlayer):
+class LayaFeaturesPlayer(LayaPlayer):
     design = "features"

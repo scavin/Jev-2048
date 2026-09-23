@@ -3,18 +3,19 @@
     python demo.py
 
 No arguments needed. It checks that the 2048 page is being served (starting a static server
-itself if it is not), opens a visible Chromium window on the game, opens the live panel in
-your own browser, and then plays one game after another with a fresh seed each time. Every
+itself if it is not), checks that the model the mode needs is reachable, opens a visible
+Chromium window on the game, opens the live panel in your own browser, and then plays one game
+after another with a fresh seed each time. Every
 move is printed as it happens, the final board of each game is left on screen for a few
 seconds, and the next game starts on its own.
 
 Stop it with Ctrl-C, or just close the game window. Either way the log is closed and the
 browser is shut down.
 
-    python demo.py --mode jev-board              # the failure case: one direction, forever
-    python demo.py --mode jev-features --speed 1 # one move every 1.2s
-    python demo.py --mode jev-state,jev-features # alternate, to see the difference
-    python demo.py --mode random                 # no API credentials needed
+    python demo.py --mode laya-board              # the failure case: one direction, forever
+    python demo.py --mode laya-features --speed 1 # one move every 1.2s
+    python demo.py --mode jev-state,laya-features # alternate models, to see the difference
+    python demo.py --mode random                  # no model at all
 """
 
 import argparse
@@ -24,7 +25,7 @@ import sys
 import labpaths  # noqa: F401
 
 from analysis import metrics
-from players import JEV_MODES, MODES
+from players import JEV_MODES, LAYA_MODES, MODES
 from runner.game_server import ensure_game_server
 from runner.interactive import SPEEDS, run_interactive
 
@@ -69,7 +70,7 @@ class Scoreboard:
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--mode", default="jev-features",
+    parser.add_argument("--mode", default="laya-features",
                         help="one mode, or several comma-separated to alternate per game "
                              "(%s)" % ", ".join(MODES))
     parser.add_argument("--seed", type=int, default=2048, help="first game's seed")
@@ -107,19 +108,42 @@ def parse_modes(raw):
     return tuple(dict.fromkeys(modes))
 
 
-def main(argv=None):
-    args = parse_args(argv)
-    modes = parse_modes(args.mode)
-    if not args.cdp and any(name in JEV_MODES for name in modes):
+def check_models(modes):
+    """Fail early, with the fix, when a model this run needs is not available.
+
+    Two models, two different prerequisites, and neither failure should look like a crash:
+    jev is remote and needs a key, laya is local and needs its server running.
+    """
+    if any(name in JEV_MODES for name in modes):
         try:
             from jev.client import JevClient
 
             JevClient()
         except Exception as exc:
             print("cannot start: %s" % exc, file=sys.stderr)
-            print("The jev modes need TYPESAFE_API_KEY. Try `python demo.py --mode random`, "
-                  "which needs no credentials.", file=sys.stderr)
+            print("The jev modes need TYPESAFE_API_KEY in $JEV_REPO/.env. A laya mode needs "
+                  "no credentials, and `--mode random` needs nothing at all.", file=sys.stderr)
             return 2
+
+    if any(name in LAYA_MODES for name in modes):
+        from laya.client import DEFAULT_HOST, DEFAULT_PORT, is_up, start_hint
+
+        if not is_up(DEFAULT_HOST, DEFAULT_PORT):
+            print("cannot start: nothing is answering on %s:%d"
+                  % (DEFAULT_HOST, DEFAULT_PORT), file=sys.stderr)
+            print("The laya modes need the local decision server. Start it with:\n  %s"
+                  % start_hint(), file=sys.stderr)
+            return 2
+    return 0
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    modes = parse_modes(args.mode)
+    if not args.cdp:
+        status = check_models(modes)
+        if status:
+            return status
 
     import os
 
