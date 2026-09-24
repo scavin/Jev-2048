@@ -52,9 +52,14 @@ python demo.py
 ```
 
 That is the whole thing. No arguments. It checks whether the 2048 page is being served
-(starting a static server itself if it is not, and stopping only the one it started), opens a
-visible Chromium window on the game, opens the live panel in your browser, and then plays
-one game after another — fresh seed each time, for as long as you leave it running.
+(starting a static server itself if it is not, and stopping only the one it started), checks
+that the model is reachable, opens a visible Chromium window on the game, opens the live panel
+in your browser, and then plays one game after another — fresh seed each time, for as long as
+you leave it running.
+
+**First run?** The setup is the four commands in §12. If you have not done them, `demo.py`
+still works with `--mode random`, which needs no model and no credentials. And if the model is
+not reachable it says which piece is missing and exits 2, rather than failing mid-game.
 
 ```
   game 1 finished: max_steps after 25 moves, score 56, max tile 8
@@ -683,13 +688,47 @@ experiment recovered it.
 
 ## 12. Requirements
 
-* Python 3.10+ with `playwright` and Chromium installed (`pip install playwright &&
-  playwright install chromium`).
-* `TYPESAFE_API_KEY` for the jev modes — read from `$JEV_REPO/.env` (default
-  `/Users/scavin/Documents/Github/Jev`) or from the environment. `demo.py --mode random` and
-  the other baselines need no credentials, and `demo.py` says so instead of failing obscurely.
-* The 2048 page on `http://127.0.0.1:8792`. You do not have to start it: `demo.py` checks and
-  starts a static server itself when nothing is serving that port. `run.py` and
-  `benchmark.py` assume it is already there, since a batch should not quietly own a server.
-* `JEV_REPO` if the [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)
-  checkout is not at `/Users/scavin/Documents/Github/Jev`.
+Two Python packages, a browser, and the jev checkout. Everything else the lab uses is in the
+standard library.
+
+### From zero
+
+```bash
+# 1. an interpreter with the lab's dependencies. httpx[http2] rather than plain httpx:
+#    jev's own client opens an http2 connection and raises without the h2 package.
+python3 -m venv ~/venvs/jev-lab
+~/venvs/jev-lab/bin/pip install playwright 'httpx[http2]'
+~/venvs/jev-lab/bin/playwright install chromium
+
+# 2. the decision layer calls two functions out of jev's own model.py
+git clone https://github.com/browser-use/jev-ultrafast ~/src/jev-ultrafast
+export JEV_REPO=~/src/jev-ultrafast
+
+# 3. a TypeSafe key: in $JEV_REPO/.env as TYPESAFE_API_KEY=…, or exported
+export TYPESAFE_API_KEY=...
+```
+
+### Then
+
+```bash
+cd jev-lab
+~/venvs/jev-lab/bin/python demo.py
+```
+
+`demo.py` starts the 2048 static server itself when nothing is serving `127.0.0.1:8792`, and
+stops only the one it started. `run.py` and `benchmark.py` assume the page is already there,
+because a batch should not quietly own a server.
+
+### What each step buys
+
+| steps done | what runs |
+|---|---|
+| 1 | `demo.py --mode random`, `greedy`, `heuristic` — real games, no model, no credentials |
+| 1 + 2 + 3 | the jev modes, i.e. everything measured in §9 |
+
+`demo.py` checks the model's prerequisites **before** it opens a browser, and says which of
+these is missing rather than failing halfway through a game. Missing key or missing `JEV_REPO`
+exits 2 with the reason; missing playwright or Chromium comes from Python itself.
+
+Every command in this readme is written `python`; use the interpreter you installed the
+dependencies into — `~/venvs/jev-lab/bin/python` in the setup above.
