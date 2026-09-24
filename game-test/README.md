@@ -1,11 +1,12 @@
-# laya-test
+# game-test
 
-Tests for the 2048 game in this repository, with the local Laya decision model used as an
-advisory judge.
+Tests for the 2048 game in this repository.
 
 The game itself is untouched: the suite drives the real page through real keyboard input and
 observes only the rendered DOM and the `localStorage` the page writes. No game internals are
 imported, so a bug in `GameManager` cannot hide behind the harness reading the same objects.
+
+Every verdict comes from `reference2048.py`. Nothing here asks a model anything.
 
 ## What each file does
 
@@ -15,11 +16,6 @@ imported, so a bug in `GameManager` cannot hide behind the harness reading the s
 | `game_client.py` | Black-box page client: reads the board, presses keys, clicks buttons, seeds a board through the page's own storage |
 | `run_tests.py` | The suite: differential move checks, restart, persistence, game over, win / keep playing |
 | `mutants.py` | Five real defects injected into private copies of the game; the suite must fail on every one |
-| `laya_client.py` | Client for the persistent Laya server |
-| `laya_server.py` | Loads the Laya checkpoint once and answers typed questions over TCP |
-| `laya_judge.py` | Distils failures into short evidence and asks Laya the triage / message questions |
-| `calibrate.py` | Measures what Laya can and cannot judge, before anything relies on it |
-| `CALIBRATION.md` | The measured results and the rules the harness follows because of them |
 
 ## How the suite decides things
 
@@ -39,35 +35,20 @@ the spawned tile can never create a new merge, making the verdict deterministic.
 
 ## Running it
 
-Start the game and the Laya server:
+Start the game:
 
 ```bash
 python3 -m http.server 8792 --bind 127.0.0.1                     # serve this repo
-/Users/scavin/Documents/models/laya/.venv/bin/python laya-test/laya_server.py --port 8791
 ```
 
 Run the suite (needs `pip install playwright && playwright install chromium`):
 
 ```bash
-python laya-test/run_tests.py --url http://127.0.0.1:8792/index.html --plies 40
-python laya-test/run_tests.py --url … --mutants        # require the suite to fail on all 5 mutants
-python laya-test/run_tests.py --url … --no-laya        # skip the Laya questions
-python laya-test/calibrate.py --cases 60               # re-measure Laya (server must be running)
+python game-test/run_tests.py --url http://127.0.0.1:8792/index.html --plies 40
+python game-test/run_tests.py --url … --mutants        # require the suite to fail on all 5 mutants
 ```
 
 The suite exits non-zero if any check fails, or if any mutant survives.
-
-## What Laya is and is not used for
-
-Laya is a typed-decision model, not an executor. It cannot run the game, read a board, or do
-arithmetic; `CALIBRATION.md` has the measurements. In this harness it only:
-
-- triages a failure into one of seven subsystems, and
-- cross-checks whether the message shown on screen matches the board.
-
-Both are advisory. Every pass/fail comes from the reference engine. Laya's message verdicts
-are compared against the deterministic verdict on every run, so its agreement rate is visible
-rather than assumed.
 
 ## Notes on the game's observable contract
 

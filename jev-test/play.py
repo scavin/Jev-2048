@@ -1,11 +1,11 @@
 """Play 2048 with jev, or with a baseline, and report measurable performance.
 
-Every policy drives the same black-box client (`laya-test/game_client.py`) against the real
+Every policy drives the same black-box client (`game-test/game_client.py`) against the real
 page, so the score is the page's own score, not a simulator's.
 
 Usage:
   /tmp/pwenv/bin/python jev-test/play.py --policies random,greedy,jev \
-      --games 3 --max-moves 150 --prompt neutral --json-out /tmp/laya2048/jev_neutral.json
+      --games 3 --max-moves 150 --prompt neutral --json-out /tmp/jev2048/jev_neutral.json
 """
 
 import argparse
@@ -18,7 +18,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(HERE), "laya-test"))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "game-test"))
 
 import game_client  # noqa: E402
 import reference2048 as ref  # noqa: E402

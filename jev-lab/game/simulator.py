@@ -1,6 +1,6 @@
 """Deterministic 2048 rules, used for legality, one-step features and every baseline.
 
-The rules come from `laya-test/reference2048.py`, an engine written from the rules rather
+The rules come from `game-test/reference2048.py`, an engine written from the rules rather
 than copied out of the game, and already used as a differential oracle against the page.
 Reusing it means "the harness thinks this move is legal" and "the page agrees" are two
 independent statements.

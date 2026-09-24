@@ -4,8 +4,8 @@ A green suite proves nothing on its own. Each mutation below is a real defect in
 js/game_manager.js, applied to a private copy of the game so the checked-out source is
 never touched. The suite must fail on every one of them.
 
-The mutation names double as the ground-truth subsystem for Laya's triage, which is how
-`--mutants` measures whether Laya's advice is worth reading.
+The mutation names double as the subsystem each defect belongs to, which is what
+`--mutants` reports when it says the suite caught it.
 """
 
 import pathlib

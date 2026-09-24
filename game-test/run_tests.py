@@ -1,17 +1,16 @@
-"""Differential test suite for the 2048 game, with Laya as an advisory judge.
+"""Differential test suite for the 2048 game.
 
 The suite drives the real page through real keyboard input and compares every observed
 board against reference2048.py, an independent implementation of the rules. Randomness is
 never controlled: a move is asserted to produce the reference slide plus exactly one new
 tile of value 2 or 4, which is a stronger check than pinning a seeded RNG.
 
-Laya's role is deliberately narrow — triaging failures and cross-checking user-facing
-messages — because measurement (CALIBRATION.md) shows it cannot read a board.
+Every verdict comes from the reference engine. Nothing here asks a model anything.
 
 Standalone use:
 
     pip install playwright && playwright install chromium
-    python laya-test/run_tests.py --url http://127.0.0.1:8792/index.html
+    python game-test/run_tests.py --url http://127.0.0.1:8792/index.html
 
 """
 
@@ -24,7 +23,6 @@ import sys
 
 sys.path.insert(0, __file__.rsplit("/", 1)[0])
 
-import laya_judge  # noqa: E402
 import reference2048 as ref  # noqa: E402
 from game_client import DIRECTION_NAMES, GameClient  # noqa: E402
 
@@ -60,13 +58,11 @@ def fmt_board(board):
 
 
 class Suite:
-    def __init__(self, game, laya=None, trace=False):
+    def __init__(self, game, trace=False):
         self.game = game
-        self.laya = laya
         self.trace = trace
         self.checks = 0
         self.failures = []
-        self.message_checks = []
 
     def say(self, line):
         if self.trace:
@@ -78,11 +74,9 @@ class Suite:
         if self.trace:
             print("    %-4s %-24s %s" % ("ok" if ok else "FAIL", test, kind), flush=True)
         if not ok:
-            evidence = laya_judge.triage_evidence(kind, **fields)
             self.failures.append({
                 "test": test,
                 "kind": kind,
-                "evidence": evidence,
                 "detail": {k: v for k, v in fields.items()},
             })
         return ok
@@ -238,38 +232,9 @@ class Suite:
             self.check(False, "keep_playing", "keep_playing_blocked")
         return snap
 
-    # ------------------------------------------------------------------ Laya layer
-
-    async def judge_messages(self, snap, test):
-        moves_possible = ref.moves_available(snap["board"])
-        largest = max([v for row in snap["board"] for v in row] or [0])
-        message = snap["visibleMessage"]
-        if message == "You win!":
-            correct = largest >= 2048
-        elif message == "Game over!":
-            correct = not moves_possible
-        else:
-            correct = moves_possible
-        expected = "matches" if correct else "contradicts"
-        verdict = laya_judge.judge_message(self.laya, snap, moves_possible, message)
-        self.message_checks.append({
-            "test": test,
-            "message": message,
-            "moves_possible": moves_possible,
-            "largest": largest,
-            "deterministic": expected,
-            "laya": verdict["verdict"],
-            "probabilities": verdict["probabilities"],
-            "agree": verdict["verdict"] == expected,
-        })
-
-    async def triage_failures(self):
-        for failure in self.failures:
-            failure["laya"] = laya_judge.triage(self.laya, failure["evidence"])
-
     # ------------------------------------------------------------------ driver
 
-    async def run(self, plies=40, seed=2048, judge=True):
+    async def run(self, plies=40, seed=2048):
         rng = random.Random(seed)
         await self.game.restart()
         self.say("\n== random play, %d plies, seed %d ==" % (plies, seed))
@@ -279,14 +244,9 @@ class Suite:
         self.say("\n== persistence across reload ==")
         await self.persistence_scenario()
         self.say("\n== game over: one merge away from a dead board ==")
-        over = await self.game_over_scenario()
+        await self.game_over_scenario()
         self.say("\n== win: two 1024 tiles merge into 2048, then Keep going ==")
-        win = await self.win_scenario()
-
-        if self.laya is not None and judge:
-            await self.judge_messages(over, "game_over")
-            await self.judge_messages(win, "win")
-            await self.triage_failures()
+        await self.win_scenario()
 
         return {
             "seed": seed,
@@ -295,7 +255,6 @@ class Suite:
             "failed": len(self.failures),
             "passed": self.checks - len(self.failures),
             "failures": self.failures,
-            "laya_message_checks": self.message_checks,
         }
 
 
@@ -322,8 +281,8 @@ def free_port():
         return sock.getsockname()[1]
 
 
-async def mutation_run(make_client, base_url, laya, plies, seed):
-    """Run the suite against every mutant and report detection + Laya triage accuracy.
+async def mutation_run(make_client, base_url, plies, seed):
+    """Run the suite against every mutant and require it to fail on each.
 
     `make_client(url)` returns a ready GameClient, so the same routine drives either a
     Playwright page or any other tab implementation.
@@ -335,17 +294,12 @@ async def mutation_run(make_client, base_url, laya, plies, seed):
         url = "%s/%s/index.html" % (base_url.rstrip("/"), name)
         game = make_client(url)
         await game.reload()
-        report = await Suite(game, laya).run(plies=plies, seed=seed, judge=laya is not None)
-        labels = [f["laya"]["subsystem"] for f in report["failures"] if f.get("laya")]
-        hits = sum(1 for label in labels if label == name)
+        report = await Suite(game).run(plies=plies, seed=seed)
         results[name] = {
             "detected": report["failed"] > 0,
             "checks": report["checks"],
             "failed": report["failed"],
             "failure_kinds": sorted({f["kind"] for f in report["failures"]}),
-            "laya_labels": {label: labels.count(label) for label in sorted(set(labels))},
-            "laya_top_label": max(set(labels), key=labels.count) if labels else None,
-            "laya_correct_fraction": round(hits / len(labels), 3) if labels else None,
         }
     return results
 
@@ -355,7 +309,6 @@ async def main():
     parser.add_argument("--url", default="http://127.0.0.1:8792/index.html")
     parser.add_argument("--plies", type=int, default=40)
     parser.add_argument("--seed", type=int, default=2048)
-    parser.add_argument("--no-laya", action="store_true")
     parser.add_argument("--trace", action="store_true",
                         help="print every move and every assertion as it happens")
     parser.add_argument("--mutants", action="store_true",
@@ -363,11 +316,6 @@ async def main():
     args = parser.parse_args()
 
     from playwright.async_api import async_playwright
-
-    laya = None
-    if not args.no_laya:
-        from laya_client import LayaClient
-        laya = LayaClient()
 
     server = None
     try:
@@ -390,7 +338,7 @@ async def main():
                 await asyncio.sleep(0.6)
                 results = await mutation_run(
                     lambda url: GameClient(PlaywrightTab(page), url=url),
-                    "http://127.0.0.1:%d" % port, laya, args.plies, args.seed)
+                    "http://127.0.0.1:%d" % port, args.plies, args.seed)
                 await browser.close()
                 print(json.dumps(results, indent=2, default=str))
                 missed = [n for n, r in results.items() if not r["detected"]]
@@ -399,7 +347,7 @@ async def main():
                 return 0 if not missed else 1
 
             await page.goto(args.url, wait_until="load")
-            suite = Suite(GameClient(PlaywrightTab(page), url=args.url), laya, trace=args.trace)
+            suite = Suite(GameClient(PlaywrightTab(page), url=args.url), trace=args.trace)
             report = await suite.run(plies=args.plies, seed=args.seed)
             await browser.close()
     finally:

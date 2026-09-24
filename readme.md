@@ -160,12 +160,12 @@ python3 -m http.server 8792 --bind 127.0.0.1
 
 Reused as-is:
 
-* **`laya-test/game_client.py`** — the black-box page client. It reads the rendered
+* **`game-test/game_client.py`** — the black-box page client. It reads the rendered
   `.tile-container .tile` elements, the score element and the `gameState` the page persists,
   and it clicks the game's own restart anchor through a real pointer sequence. No game
   internals are imported, so a bug in `GameManager` cannot hide behind the harness reading
   the same object graph.
-* **`laya-test/reference2048.py`** — an independent rules engine, already used in this repo
+* **`game-test/reference2048.py`** — an independent rules engine, already used in this repo
   as a differential oracle against the page. The lab uses it as its simulator, so "the
   harness thinks this move is legal" and "the page agrees" stay two separate statements.
 * **`jev-test/jev_client.py`** — the loader that imports `jev_ultrafast/model.py` without
@@ -708,7 +708,7 @@ experiment recovered it.
 ├── readme.md              this file            readme-cn.md  the Chinese version
 ├── README-2048.md         the upstream game's own readme
 ├── prompt.md              the brief this experiment was built against (Chinese)
-├── laya-test/             existing control code the lab reuses:
+├── game-test/             existing control code the lab reuses:
 │                            game_client.py    black-box page client (DOM + localStorage)
 │                            reference2048.py  independent rules engine, used as the simulator
 │                            run_tests.py      the repo's own differential suite

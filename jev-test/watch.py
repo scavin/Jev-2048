@@ -15,7 +15,7 @@ import sys
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(os.path.dirname(HERE), "laya-test"))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "game-test"))
 
 import game_client  # noqa: E402
 import reference2048 as ref  # noqa: E402

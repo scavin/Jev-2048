@@ -1,6 +1,6 @@
 """The black-box page adapter: read the board, press a direction, restart.
 
-`laya-test/game_client.py` already owns the hard part — reading a settled board out of a
+`game-test/game_client.py` already owns the hard part — reading a settled board out of a
 mid-animation DOM, and clicking the game's own restart anchor through a real pointer
 sequence. This module only adds what the experiment needs on top: deterministic seeded
 starts, a wait for the page to actually react to a key, and screenshots.

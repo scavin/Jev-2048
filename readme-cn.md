@@ -147,11 +147,11 @@ python3 -m http.server 8792 --bind 127.0.0.1
 
 原样复用：
 
-* **`laya-test/game_client.py`** —— 黑盒页面客户端。它读取渲染出来的
+* **`game-test/game_client.py`** —— 黑盒页面客户端。它读取渲染出来的
   `.tile-container .tile` 元素、分数元素，以及页面持久化的 `gameState`，
   并通过真实的指针序列点击游戏自己的重开锚点。不导入任何游戏内部结构，
   所以 `GameManager` 里的 bug 没法躲在「harness 读的是同一张对象图」后面。
-* **`laya-test/reference2048.py`** —— 独立的规则引擎，本仓库早已把它当作对照页面的差分
+* **`game-test/reference2048.py`** —— 独立的规则引擎，本仓库早已把它当作对照页面的差分
   oracle。实验把它用作模拟器，这样「harness 认为这步合法」和「页面同意」始终是两句独立的话。
 * **`jev-test/jev_client.py`** —— 加载器，导入 `jev_ultrafast/model.py` 而不会连带拉起浏览器
   agent。
@@ -659,7 +659,7 @@ heuristic 一局走 404 步，其中 10% 摸到 1024，而 jev 各模式要么�
 .                          上游 2048 游戏（index.html、js/、style/、meta/）
 ├── readme.md              本文件              readme-cn.md  中文版
 ├── README-2048.md         上游游戏自己的 readme
-├── laya-test/             实验复用的既有控制代码：
+├── game-test/             实验复用的既有控制代码：
 │                            game_client.py    黑盒页面客户端（DOM + localStorage）
 │                            reference2048.py  独立规则引擎，用作模拟器
 │                            run_tests.py      本仓库自己的差分测试套件
