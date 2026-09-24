@@ -47,8 +47,12 @@ python demo.py
 ```
 
 就这么简单。没有参数。它会检查 2048 页面有没有被伺服（没有就自己起一个静态服务器，
-并且只关掉自己起的那个），打开一个可见的 Chromium 窗口加载游戏，在你的浏览器里打开实时面板，
-然后一局接一局地玩 —— 每局换新种子，你想让它跑多久就跑多久。
+并且只关掉自己起的那个），检查模型能不能连上，打开一个可见的 Chromium 窗口加载游戏，
+在你的浏览器里打开实时面板，然后一局接一局地玩 —— 每局换新种子，你想让它跑多久就跑多久。
+
+**第一次跑？** 环境搭建就是 §12 里的那几条命令。没做也没关系：`demo.py --mode random`
+照样能跑，它不需要模型也不需要凭据。而如果模型连不上，它会说清缺哪一块并以退出码 2 退出，
+而不是玩到一半才失败。
 
 ```
   game 1 finished: max_steps after 25 moves, score 56, max tile 8
@@ -635,13 +639,45 @@ heuristic 一局走 404 步，其中 10% 摸到 1024，而 jev 各模式要么�
 
 ## 12. 环境要求
 
-* Python 3.10+，装有 `playwright` 和 Chromium（`pip install playwright &&
-  playwright install chromium`）。
-* jev 各模式需要 `TYPESAFE_API_KEY` —— 从 `$JEV_REPO/.env`（默认
-  `/Users/scavin/Documents/Github/Jev`）或环境变量读取。`demo.py --mode random` 和其他基线
-  不需要凭据，`demo.py` 会直接说明这一点，而不是抛出难懂的失败。
-* 2048 页面在 `http://127.0.0.1:8792`。你不必自己启动它：`demo.py` 会检查，
-  并在该端口没有服务时自己起一个静态服务器。`run.py` 和 `benchmark.py` 假定它已经在运行，
-  因为批量任务不应该悄悄占有一个服务器。
-* 如果 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) 的 checkout
-  不在 `/Users/scavin/Documents/Github/Jev`，需要设置 `JEV_REPO`。
+两个 Python 包、一个浏览器，外加 jev 的 checkout。lab 用到的其余部分全在标准库里。
+
+### 从零开始
+
+```bash
+# 1. an interpreter with the lab's dependencies. httpx[http2] rather than plain httpx:
+#    jev's own client opens an http2 connection and raises without the h2 package.
+python3 -m venv ~/venvs/jev-lab
+~/venvs/jev-lab/bin/pip install playwright 'httpx[http2]'
+~/venvs/jev-lab/bin/playwright install chromium
+
+# 2. the decision layer calls two functions out of jev's own model.py
+git clone https://github.com/browser-use/jev-ultrafast ~/src/jev-ultrafast
+export JEV_REPO=~/src/jev-ultrafast
+
+# 3. a TypeSafe key: in $JEV_REPO/.env as TYPESAFE_API_KEY=…, or exported
+export TYPESAFE_API_KEY=...
+```
+
+### 然后
+
+```bash
+cd jev-lab
+~/venvs/jev-lab/bin/python demo.py
+```
+
+`127.0.0.1:8792` 上没有服务时，`demo.py` 会自己起一个 2048 静态服务器，并且只关掉自己起的那个。
+`run.py` 和 `benchmark.py` 假定页面已经在跑，因为批量任务不应该悄悄占有一个服务器。
+
+### 每一步能换来什么
+
+| 做到哪一步 | 能跑什么 |
+|---|---|
+| 1 | `demo.py --mode random`、`greedy`、`heuristic` —— 真实对局，不用模型、不用凭据 |
+| 1 + 2 + 3 | jev 各模式，也就是 §9 里测过的全部内容 |
+
+`demo.py` 在**打开浏览器之前**就检查模型的先决条件，缺哪一步就说哪一步，而不是玩到一半才失败。
+缺 key 或缺 `JEV_REPO` 会以退出码 2 结束并说明原因；缺 playwright 或缺 Chromium 的报错来自
+Python 本身。
+
+本文档里所有命令都写作 `python`；请用你装了依赖的那个解释器 —— 也就是上面这套里的
+`~/venvs/jev-lab/bin/python`。
