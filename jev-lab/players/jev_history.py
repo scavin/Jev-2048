@@ -6,4 +6,4 @@ from players.jev_player import JevPlayer
 
 
 class JevHistoryPlayer(JevPlayer):
-    design = "history"
+    mode = "jev-history"

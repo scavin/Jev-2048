@@ -29,7 +29,7 @@ import labpaths  # noqa: F401
 
 from analysis import metrics
 from game.adapter import GameAdapter
-from players import LAYA_MODES, MODES, build
+from players import MODES, build
 from runner.browser import BrowserSession
 from runner.game_loop import GameOutcome, LogWriter, gather_limited, play_one
 
@@ -210,11 +210,6 @@ async def main(args=None):
     cdp = args.cdp
     if cdp and workers > 1:
         print("--cdp drives one attached tab: workers %d -> 1" % workers, flush=True)
-        workers = 1
-    if any(name in LAYA_MODES for name in modes) and workers > 1:
-        # One local checkpoint on one GPU. Concurrent games would only queue on the model
-        # anyway, and the client serializes them regardless.
-        print("laya drives one local model: workers %d -> 1" % workers, flush=True)
         workers = 1
 
     paths = {

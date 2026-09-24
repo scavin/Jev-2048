@@ -154,16 +154,13 @@ class GameRunner:
             if not legal:
                 ended = "game_over"
                 break
-            # The mode name says both axes; the state design is the one that decides whether
-            # the harness has to compute a one-ply simulation for this step.
-            design = self.mode.split("-", 1)[1] if "-" in self.mode else self.mode
             used_features = {}
-            if design == "features":
+            if self.mode == "jev-features":
                 used_features = feat.features_all(board)
 
             key = observation.symmetry_key
             ctx = DecisionContext(
-                design=design, board=board, score=observation.score, step=step,
+                mode=self.mode, board=board, score=observation.score, step=step,
                 legal=legal, last_move=actions[-1] if actions else None,
                 recent_moves=list(actions), recent_actions=list(actions),
                 recent_boards=list(digests), recent_invalid=list(invalid),

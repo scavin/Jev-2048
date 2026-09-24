@@ -1,15 +1,15 @@
-"""What the harness shows the model, per state design.
+"""What the harness shows jev, per mode.
 
 The experiment has exactly one variable: the state handed over. So the goal, the rules and
-the four candidate labels are byte-identical in every design, and only `state` and
+the four candidate labels are byte-identical in every mode, and only `state` and
 `criteria` change:
 
-| design        | added to the board                                     |
+| mode          | added to the board                                     |
 |---------------|--------------------------------------------------------|
-| `board`       | nothing                                                |
-| `state`       | score, max tile, empties, last move, recent moves, step, invalid attempts |
-| `history`     | the last 16 actions, recent board digests, pattern repeat count, invalid attempts |
-| `features`    | the harness's own one-ply simulation of all four directions |
+| jev-board     | nothing                                                |
+| jev-state     | score, max tile, empties, last move, recent moves, step, invalid attempts |
+| jev-history   | the last 16 actions, recent board digests, pattern repeat count, invalid attempts |
+| jev-features  | the harness's own one-ply simulation of all four directions |
 
 Nothing else is ever added. No heuristics, no advice, no plan.
 """
@@ -18,7 +18,8 @@ from dataclasses import dataclass, field
 
 import labpaths  # noqa: F401
 
-DESIGNS = ("board", "state", "history", "features", "state-history")
+MODES = ("jev-board", "jev-state", "jev-history", "jev-features", "jev-state-history")
+JEV_MODES = MODES
 PRESENT_ORDER = ("up", "down", "left", "right")
 
 GOAL = "Avoid game over and reach the highest tile possible."
@@ -40,9 +41,9 @@ DIRECTION_TEXT = {
 
 @dataclass
 class Context:
-    """Everything the harness knows at decision time. Each design reads a slice of it."""
+    """Everything the harness knows at decision time. Each mode reads a slice of it."""
 
-    design: str
+    mode: str
     board: list
     score: int
     step: int
@@ -80,12 +81,12 @@ class Prompt:
 
 
 def instructions():
-    """Identical in every design: the goal and the rules are not the experimental variable."""
+    """Identical in every mode: the goal and the rules are not the experimental variable."""
     return {"goal": GOAL, "rules": RULES}
 
 
 def _criteria(ctx):
-    if ctx.design == "features":
+    if ctx.mode == "jev-features":
         return {
             name: {"description": DIRECTION_TEXT[name], **ctx.features[name].as_dict()}
             for name in PRESENT_ORDER
@@ -96,17 +97,17 @@ def _criteria(ctx):
 def build(ctx):
     """Assemble the request body and the readable rendering of it."""
     builders = {
-        "board": _state_board_only,
-        "state": _state_explicit,
-        "history": _state_history,
-        "features": _state_features,
-        "state-history": _state_explicit_and_history,
+        "jev-board": _state_board_only,
+        "jev-state": _state_explicit,
+        "jev-history": _state_history,
+        "jev-features": _state_features,
+        "jev-state-history": _state_explicit_and_history,
     }
-    if ctx.design not in builders:
-        raise ValueError("unknown state design %r" % (ctx.design,))
-    state = builders[ctx.design](ctx)
+    if ctx.mode not in builders:
+        raise ValueError("unknown jev mode %r" % (ctx.mode,))
+    state = builders[ctx.mode](ctx)
     criteria = _criteria(ctx)
-    text = render(ctx.design, state, criteria)
+    text = render(ctx.mode, state, criteria)
     return Prompt(state=state, criteria=criteria, instructions=instructions(), text=text)
 
 
@@ -252,15 +253,15 @@ def _render_features(state, criteria):
     return lines
 
 
-def render(design, state, criteria):
-    """The prompt as text, for the log and the dashboard. Not sent to the model — `state` is."""
-    if design == "board":
+def render(mode, state, criteria):
+    """The prompt as text, for the log and the dashboard. Not sent to jev — `state` is."""
+    if mode == "jev-board":
         lines = ["Current 2048 board:", "", _board_text(state["board"]), ""]
-    elif design == "state":
+    elif mode == "jev-state":
         lines = _render_state(state)
-    elif design == "history":
+    elif mode == "jev-history":
         lines = ["Board:", _board_text(state["board"]), ""] + _render_history(state)
-    elif design == "state-history":
+    elif mode == "jev-state-history":
         lines = _render_state(state) + _render_history(state)
     else:
         lines = _render_features(state, criteria)

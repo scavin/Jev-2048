@@ -6,4 +6,4 @@ from players.jev_player import JevPlayer
 
 
 class JevFeaturesPlayer(JevPlayer):
-    design = "features"
+    mode = "jev-features"

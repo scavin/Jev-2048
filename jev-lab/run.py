@@ -1,6 +1,6 @@
-"""Run 2048 with a model in a visible browser, one move at a time.
+"""Run 2048 with jev in a visible browser, one move at a time.
 
-    python run.py --mode laya-board
+    python run.py --mode jev-board
     python run.py --mode jev-features --speed 1
     python run.py --mode jev-history --cdp http://127.0.0.1:9222
 
@@ -23,7 +23,7 @@ from runner.interactive import SPEEDS, run_interactive
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--mode", default="laya-board",
+    parser.add_argument("--mode", default="jev-board",
                         help="one of %s (comma-separated allowed)" % ", ".join(MODES))
     parser.add_argument("--seed", type=int, default=2048, help="spawn stream seed")
     parser.add_argument("--games", type=int, default=1,

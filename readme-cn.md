@@ -9,71 +9,33 @@
 [README-2048.md](README-2048.md)。`jev-lab/` 下面才是加在上面的实验：它没有重写游戏，
 也没有改动游戏的文件，而是从外部驱动它，走渲染后的 DOM 和键盘，完全按人的方式来。
 
-本次实验所依据的原始任务说明保存在 [prompt.md](prompt.md)（中文）：它就是这个仓库要回答的
-问题，建议和 §10 对照着读 —— 看当初要求了什么、数据实际说了什么。
+本次实验所依据的原始任务说明保存在 [prompt.md](prompt.md)：它就是这个仓库要回答的问题，
+建议和 §10 对照着读 —— 看当初要求了什么、数据实际说了什么。
 
-实验有两个轴。**state 设计**是被测量的那个轴，两个模型共用；**模型**是另一个轴，
-而一个模式名同时说明这两者：
+模型始终不变。这里每个 jev 模式用的都是同一个模型、同一个 endpoint、同一段 rules 文本、
+同一组四个候选标签。唯一变化的是 **harness 给它看什么**：
 
-| 设计 | 交给模型的状态 |
+| 模式 | harness 交给 jev 的状态 |
 |---|---|
-| `board` | 只有 4×4 棋盘，别的什么都没有 |
-| `state` | + 分数、最大方块、空格数、上一步、最近几步、步数、无效尝试次数 |
-| `history` | + 最近 16 个动作、最近的棋盘摘要、这个形状出现过多少次 |
-| `features` | + harness 自己对四个方向做的 one-ply 模拟 |
-| `state-history` | `state` **加** `history`，两者同时给 |
+| `jev-board` | 只有 4×4 棋盘，别的什么都没有 |
+| `jev-state` | + 分数、最大方块、空格数、上一步、最近几步、步数、无效尝试次数 |
+| `jev-history` | + 最近 16 个动作、最近的棋盘摘要、这个形状出现过多少次 |
+| `jev-features` | + harness 自己对四个方向做的 one-ply 模拟 |
+| `jev-state-history` | `jev-state` **加** `jev-history`，两者同时给 |
 
-| 模型 | 是什么 | 需要什么 | 延迟 |
-|---|---|---|---|
-| `jev` | 远程 typed-choice 模型，走 TypeSafe | `TYPESAFE_API_KEY` | ~350 ms |
-| `laya` | 本地 checkpoint（ModernBERT-large，MPS） | `127.0.0.1:8791` 上的本地服务器 | 60–400 ms |
+第五个条件的由来：四个必需模式之间没法干净地对比。模式 3 的定义是棋盘加历史，
+所以从模式 2 走到模式 3，既加进了历史，*又丢掉了模式 2 的计数器* —— 一次改了两件事。
+`jev-state-history` 把计数器固定住，再在上面叠历史，这样才能单独隔离出历史本身的效果。
 
-所以一共有十个模式：`laya-features` 是把 harness 的 one-ply 模拟交给 laya，
-而 `jev-features` 是把一模一样、逐字节相同的东西交给 jev。切换只是改模式名；
-harness 里没有任何别的地方知道是哪个模型在做决定。
-
-`state-history` 这个设计之所以存在，是因为四个必需设计之间没法干净地对比。
-任务说明里的模式 3 定义为棋盘加历史，所以从 `state` 走到 `history`，既加进了历史，
-*又丢掉了计数器* —— 一次改了两件事。`state-history` 把计数器固定住，再在上面叠历史，
-这样才能单独隔离出历史本身的效果。
-
-三个确定性基线（`random`、`greedy`、`heuristic`）跑同样的对局，
-好让模型数字有东西可比。
+三个确定性基线（`random`、`greedy`、`heuristic`）跑同样的对局，好让 jev 的数字有东西可比。
 
 整个实验存在的目的就是回答一个问题：
 
-> 随着 harness 把越来越多的工作交给模型，它的能力在哪里停止提升 —— 又在哪一点上，
+> 随着 harness 把越来越多的工作交给 jev，它的能力在哪里停止提升 —— 又在哪一点上，
 > 更多上下文不再能替代规划？
 
-本仓库里没有任何地方预设了赢家。对比表是从日志生成的；如果某个模式输给了 `greedy`，
+本仓库里没有任何地方预设了赢家。对比表是从日志生成的；如果某个 jev 模式输给了 `greedy`，
 表里就这么写。
-
-### 一条实测出来的约束，不是假设
-
-**laya 在 MPS 上不是线程安全的。** 两次重叠的调用会争抢 Metal command buffer，
-把整个服务器搞挂 —— 一次 12 路并发就把它打崩了，报错是：
-
-```
--[_MTLCommandBuffer commit]:691: failed assertion `commit command buffer with uncommitted encoder'
-failed assertion _status < MTLCommandBufferStatusCommitted at line 323 in -[IOGPUMetalCommandBuffer setCurrentCommandEncoder:]
-```
-
-所以客户端把每次调用串行化在一道门后面 —— 一个在全新描述符上取的 `flock`，
-因此它同时覆盖本进程的线程和任何其他进程 —— 而 benchmark 对 laya 模式把 `--workers`
-压到 1，因为并发对局反正也只会排在那一个本地模型上。实验里的并发绝不能变成模型上的并发。
-
-### 两个模型被问的是什么，以及验证了什么
-
-两者拿到相同的 `state`、相同的 criteria 和相同的 instructions。这不是承诺 ——
-是验证过的：两个模型拆分之后，已发布的 jev 运行里记录的 11,050 条 prompt
-都能从同一份 state 逐字节重建，所以 §9 里的 jev 数字描述的仍然是 jev 当时真正收到的内容。
-
-读 laya 结果之前，有一个值得知道的先验。`laya-test/CALIBRATION.md` 在这台机器上测过这个
-checkpoint，发现它**读不了一个 4×4 的数字网格**：拿棋盘做四选一的问题，结果就是随机水平
-（50%），对一个没有任何相邻相等方块的满盘回答 `in_progress`，对一个只有两个方块的初始盘
-回答 `won`。它还发现即使答对了，置信度也接近零，而且证据超过约 40 个词之后，
-信号就崩到随机水平。`board` 设计交给 laya 的正是这样一个网格，然后问它方向 ——
-所以这份标定就是这个实验可以检验的一个预测。
 
 ---
 
@@ -84,27 +46,16 @@ cd jev-lab
 python demo.py
 ```
 
-就这么简单。没有参数。它会检查 2048 页面有没有在被伺服（没有就自己起一个静态服务器，
-并且只关掉自己起的那个），检查该模式需要的模型是否可达，打开一个可见的 Chromium 窗口加载
-游戏，在你的浏览器里打开实时面板，然后一局接一局地玩 —— 每局换新种子，
-你想让它跑多久就跑多久。
-
-默认模式是 `laya-features`，也就是本地模型：不需要 API key，但需要 §12 里的决策服务器正在
-运行。如果它没在跑，`demo.py` 会打印启动它的命令并以 2 退出，而不是在一局游戏跑到一半时
-才失败。`--mode jev-features` 改用远程模型，`--mode random` 则完全不需要模型。
+就这么简单。没有参数。它会检查 2048 页面有没有被伺服（没有就自己起一个静态服务器，
+并且只关掉自己起的那个），打开一个可见的 Chromium 窗口加载游戏，在你的浏览器里打开实时面板，
+然后一局接一局地玩 —— 每局换新种子，你想让它跑多久就跑多久。
 
 ```
-  game 1 finished: max_steps after 12 moves, score 0, max tile 4
-    best 0 (game 1, laya-features) · 1 played · avg 0 · 256+ 0/1
-  game 2 finished: max_steps after 12 moves, score 32, max tile 8
-    best 32 (game 2, laya-features) · 2 played · avg 16 · 256+ 0/2
-  ...
-stopped after 6 games.
-  laya-features      games 6   avg score 11      median 4       best 32     max tile 5     256+  0.0%
+  game 1 finished: max_steps after 25 moves, score 56, max tile 8
+    best 56 (game 1, jev-board) · 1 played · avg 56 · 256+ 0/1
+  game 2 finished: max_steps after 25 moves, score 112, max tile 16
+    best 112 (game 2, jev-features) · 2 played · avg 84 · 256+ 0/2
 ```
-
-这些是真实运行出来的真实数字，也是诚实的初印象：本地模型玩得很糟，§9 说明了原因。
-`--mode jev-features` 是另一个模型，它是会玩的。
 
 用 **Ctrl-C** 停，或者直接**关掉游戏窗口** —— 两者都会关闭日志、关掉浏览器并打印汇总。
 中途被打断的一局会保留它实际走出的那些移动。
@@ -160,10 +111,7 @@ python3 -m http.server 8792 --bind 127.0.0.1
 * **`jev-test/jev_client.py`** —— 加载器，导入 `jev_ultrafast/model.py` 而不会连带拉起浏览器
   agent。
 * **`browser-use/jev-ultrafast`** —— `model.post_json` 和 `model.validate_choice`。
-  实验里的每一次 jev 决策都走这两个函数，和已发布的浏览器 agent 用的是同一对。
-* **`laya-test/laya_server.py` + `laya-test/laya_client.py`** —— 常驻的本地决策服务器和它的
-  瘦客户端，本仓库里已有。实验说的是它说的同一套协议，所以一次 laya 决策走的路径，
-  和本仓库自己的测试套件用的是同一条。
+  实验里的每一次决策都走这两个函数，和已发布的浏览器 agent 用的是同一对。
 
 实验新增的部分：带种子的浏览器会话、状态构造器、基线、失败检测器、指标、dashboard 和
 runner。
@@ -220,8 +168,8 @@ runner。
 
 ## 2. 唯一的变量
 
-每个模式发送同一段 `instructions` 块和同样的四个候选标签，两个模型都是如此。
-只有 `state` 和 `criteria` 不同。
+每个模式发送同一段 `instructions` 块和同样的四个候选标签。只有 `state` 和 `criteria`
+不同。
 
 ```text
 goal:  Avoid game over and reach the highest tile possible.
@@ -234,7 +182,7 @@ rules: 2048 rules: a move slides every tile toward that edge. Two tiles of equal
 四个方向永远都会给出，包括非法的。合法性是 harness 可能给、也可能不给的信息 ——
 正因如此，invalid-move 率才是一个真实的测量值，而不是恒定的零。
 
-### 设计 1 — `board`（`jev-board` / `laya-board`）
+### 模式 1 — `jev-board`
 
 ```text
 Current 2048 board:
@@ -255,7 +203,7 @@ Goal:
 Avoid game over and reach the highest tile possible.
 ```
 
-### 设计 2 — `state`（`jev-state` / `laya-state`）
+### 模式 2 — `jev-state`
 
 ```text
 Board:
@@ -275,7 +223,7 @@ Recent invalid moves: RIGHT x2
 Repeated move pattern: no
 ```
 
-### 设计 3 — `history`（`jev-history` / `laya-history`）
+### 模式 3 — `jev-history`
 
 ```text
 Board:
@@ -297,9 +245,9 @@ Invalid RIGHT attempts recently: 2
 
 history 模式只陈述事实，到此为止。它从不说遇到重复该怎么办。
 
-### 设计 4 — `features`（`jev-features` / `laya-features`）
+### 模式 4 — `jev-features`
 
-harness 对每个方向做一层前瞻模拟，并报告它产出的棋盘的测量值。只有一层：
+harness 对每个方向做一步前瞻模拟，并报告它产出的棋盘的测量值。只有一层：
 没有两步前瞻，没有搜索，没有 rollout。
 
 ```text
@@ -322,7 +270,7 @@ DOWN:
 
 * `monotonicity` ∈ [0, 1] —— 对每一行和每一列，最好的单向连续段除以该线的总变化量。
   1.0 表示每条线都朝一个方向走。
-* `smoothness` ≤ 0 —— 相邻非空方块之间 `|log2` gap`|` 总和的负值。
+* `smoothness` ≤ 0 —— 相邻非空方块之间 `|log2 差值|` 总和的负值。
 * `mobility` —— 还有多少个方向能改变棋盘。
 * `board_entropy` —— 方块数值分布的香农熵，单位 bit。
 * `corner_preserved` / `max_tile_in_corner` —— 最大方块是否在角上。
@@ -330,7 +278,7 @@ DOWN:
   等于凭空发明一种玩家还没开始的守角策略。
 * `changed_cells` —— 与移动前棋盘不同的格子数。
 
-### 设计 5 — `state-history`（`jev-state-history` / `laya-state-history`）
+### 模式 5 — `jev-state-history`
 
 模式 2 的块后面接模式 3 的块，其他什么都不改。同样两个块，同样顺序，没有额外建议：
 
@@ -366,8 +314,8 @@ Recent action pattern: RIGHT, LEFT, RIGHT, LEFT, RIGHT, DOWN
 | `heuristic` | 对向前一步的棋盘做手写评估后取 argmax |
 
 heuristic 使用 nneonneo 公开的权重：空格（2.7）、单调性（1.0）、平滑度（0.1），
-另外加了三项：`log2(max tile)` 的角落奖励、移动后每个可用合并 0.6、每个合法方向 1.0。
-这些权重没有在本 benchmark 上调过，而且对任何用模型的模式都不可见。
+另外加了三项：`log2(最大方块)` 的角落奖励、移动后每个可用合并 0.6、每个合法方向 1.0。
+这些权重没有在本 benchmark 上调过，而且对任何 jev 模式都不可见。
 
 三个基线都只会选合法方向，所以它们的 invalid-move 率按构造就是零。
 
@@ -449,19 +397,13 @@ Math.random = () => { /* mulberry32 */ };
 `page_reacted` 是页面实际做了什么。两者不一致时，这一步会被打上 `harness_desync` ——
 那意味着 harness 对游戏的判断错了，而不是 jev 错了。
 
-§9 里结果背后的五份日志以 gzip 提交，因为那张表和 §10 里的每个数字都是从它们推导出来的：
+§9 里结果背后的三份日志以 gzip 提交，因为那张表和 §10 里的每个数字都是从它们推导出来的：
 
 ```bash
 cd jev-lab
 for f in logs/*.jsonl.gz; do gzip -dc "$f" | head -1 | python3 -m json.tool; done   # one step
-gzip -dc logs/jev.jsonl.gz | wc -l      # 11050 steps
-gzip -dc logs/laya-a.jsonl.gz | wc -l   # 4800
+gzip -dc logs/jev.jsonl.gz | wc -l                                                  # 11050 steps
 ```
-
-决定层字段的名字是 `jev_probabilities`、`jev_confidence`、`jev_attempts`、`jev_model` 和
-`jev_usage`。这些名字是历史遗留：字段里装的是做决定的那个模型返回的内容，对 `laya-*` 模式
-来说装的就是 laya 的。改名会让已经发布的 jev 日志失效，所以它们保持原样，
-而这段说明解释了它们的含义。
 
 ---
 
@@ -489,24 +431,20 @@ gzip -dc logs/laya-a.jsonl.gz | wc -l   # 4800
 ```bash
 cd jev-lab
 
-# watch it play, forever (see §0). laya is local; jev needs a key.
+# watch it play, forever (see §0)
 python demo.py
-python demo.py --mode jev-features
-python demo.py --mode laya-state,laya-features   # alternate, to see the difference
-python demo.py --mode random                     # no model at all
 
 # one game, visible browser, live panel
-python run.py --mode laya-board
+python run.py --mode jev-board
 python run.py --mode jev-features --speed 1
 python run.py --mode jev-history --cdp http://127.0.0.1:9222   # drive an existing Chrome
-python run.py --mode laya-board --games 0                      # until stopped
+python run.py --mode jev-board --games 0                       # until stopped
 
 # batch
 python benchmark.py --mode random     --games 100 --headless
 python benchmark.py --mode greedy     --games 100 --headless
 python benchmark.py --mode heuristic  --games 100 --headless
-python benchmark.py --mode laya-board    --games 100 --headless
-python benchmark.py --mode jev-board     --games 100 --headless
+python benchmark.py --mode jev-board    --games 100 --headless
 python benchmark.py --mode jev-state    --games 100 --headless
 python benchmark.py --mode jev-history  --games 100 --headless
 python benchmark.py --mode jev-features --games 100 --headless
@@ -534,8 +472,8 @@ Start / Pause / Step / Reset / 速度 1x·5x·20x·Max 都在，用来单步观�
 
 ## 9. 结果
 
-五次运行，同样的种子、同样的页面、同样的 rules 文本、同样的候选标签集合。每局都导航到
-`index.html?seed=N`，所以生成流只是 `N` 的函数，每个模式的第 `i` 局面对的是同一条流。
+三次运行，同样的种子、同样的页面、同样的 rules 文本、同样的模型。每局都导航到
+`index.html?seed=N`，生成流只是 `N` 的函数。
 
 ```bash
 cd jev-lab
@@ -544,20 +482,14 @@ cd jev-lab
 python benchmark.py --mode random,greedy,heuristic --games 20 \
   --seed 123 --headless --workers 6 --max-steps 2000 --tag baseline
 
-# jev: capped at 300 moves, because it does not reliably finish
+# the model: capped at 300 moves, because it does not reliably finish
 python benchmark.py --mode jev-board,jev-state,jev-history,jev-features --games 12 \
   --seed 123 --headless --workers 4 --max-steps 300 --tag jev
 python benchmark.py --mode jev-state-history --games 12 \
   --seed 123 --headless --workers 4 --max-steps 300 --tag jev-sh
 
-# laya: one local model, so the client serializes and workers collapse to 1
-python benchmark.py --mode laya-board,laya-state,laya-history --games 8 \
-  --seed 123 --headless --max-steps 200 --tag laya-a
-python benchmark.py --mode laya-features,laya-state-history --games 8 \
-  --seed 123 --headless --max-steps 200 --tag laya-b
-
 python analysis/report.py results/baseline_summary.json results/jev_summary.json \
-  results/jev-sh_summary.json results/laya-a_summary.json results/laya-b_summary.json
+  results/jev-sh_summary.json
 ```
 
 | Mode | Games | Scored | Abort% | Avg Score | Median | P90 | Max | Avg Steps | Max Tile | 256% | 512% | 1024% | 2048% | 4096% | Invalid% | Loop% | Repeat% | Corner% | Collapse% | Trap% | Stagnation% | Avg Lat ms | P50 ms | P95 ms |
@@ -570,35 +502,24 @@ python analysis/report.py results/baseline_summary.json results/jev_summary.json
 | jev-history | 12 | 12 | 0.0 | 462.3 | 458.0 | 685.6 | 1036 | 261.7 | 53.3 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 74.20% | 0.06% | 68.41% | 0.16% | 0.00% | 0.57% | 60.86% | 487.2 | 362.6 | 967.6 |
 | jev-features | 12 | 12 | 0.0 | 3781.7 | 4282.0 | 4555.6 | 4564 | 272.6 | 373.3 | 91.7 | 50.0 | 0.0 | 0.0 | 0.0 | 0.00% | 0.86% | 0.00% | 2.57% | 0.03% | 1.86% | 0.00% | 425.5 | 354.4 | 779.0 |
 | jev-state-history | 12 | 12 | 0.0 | 779.7 | 736.0 | 1182.8 | 1356 | 171.3 | 77.3 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 44.55% | 0.83% | 38.33% | 0.39% | 0.15% | 2.38% | 28.26% | 558.6 | 366.8 | 1216.1 |
-| laya-board | 8 | 8 | 0.0 | 29.5 | 12.0 | 66.4 | 128 | 200.0 | 6.5 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 95.00% | 0.00% | 93.50% | 0.06% | 0.00% | 0.00% | 93.75% | 84.3 | 82.7 | 99.8 |
-| laya-state | 8 | 8 | 0.0 | 6.5 | 6.0 | 10.4 | 16 | 200.0 | 3.8 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 98.00% | 0.00% | 96.31% | 0.00% | 0.00% | 0.00% | 97.00% | 107.1 | 106.2 | 120.9 |
-| laya-history | 8 | 8 | 0.0 | 31.5 | 6.0 | 79.2 | 152 | 200.0 | 5.8 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 95.63% | 0.44% | 93.06% | 0.00% | 0.00% | 0.00% | 88.25% | 204.5 | 205.9 | 227.3 |
-| laya-features | 8 | 8 | 0.0 | 37.0 | 42.0 | 59.6 | 68 | 200.0 | 9.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 94.19% | 0.00% | 92.69% | 0.06% | 0.00% | 0.00% | 92.69% | 113.3 | 111.4 | 125.7 |
-| laya-state-history | 8 | 8 | 0.0 | 8.0 | 4.0 | 17.6 | 40 | 200.0 | 3.8 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 97.88% | 0.00% | 95.94% | 0.00% | 0.00% | 0.00% | 96.94% | 227.0 | 225.9 | 262.1 |
 
 读这张表：
 
 * **Games / Scored / Abort%** —— harness 中止的对局（连接掉线、页面从未加载）是被截断的对局，
-  不是结果，所以它被排除在分数、步数和方块统计之外，只在这里计数。五次运行全部以
-  **0% 中止**结束。
-* **Avg Steps** 是封顶的：基线 2000，jev 模式 300，laya 模式 200。这个上限从未卡住任何一局
-  基线（最长的一局是 719 步），也只卡住了部分 jev 对局 —— 但它卡住了**每一局 laya 对局**，
-  所以每个 laya 分数都还是一个仍在进行中的对局的下界。`--max-steps` 是预算，不是游戏规则；
-  jev 和 laya 的上限不同，是因为本地模型每步更慢，而且它的对局永远不会结束。
-* **样本量不同**，原因相同：基线 20 局，每个 jev 模式 12 局，每个 laya 模式 8 局。
-  每个模式都用 `--seed 123`，所以任意两个模式的第 `i` 局面对的是同一条生成流。
+  不是结果，所以它被排除在分数、步数和方块统计之外，只在这里计数。两次运行都是
+  **0% 中止**。
+* **Avg Steps** 对每一行 jev 封顶 300，对基线封顶 2000。这个上限从未卡住任何一局基线
+  （最长的一局是 719 步）；它卡住了 `jev-board` 的 12/12、`jev-features` 的 7/12、
+  `jev-history` 的 9/12 和 `jev-state-history` 的 3/12。因此被封顶的 jev 分数是**下界**，
+  而 `jev-board` 的 300 步在多数对局里只做出最大方块为 4 的棋盘。
 * **Invalid%** 是被游戏忽略的移动占比，由模拟器测量，并用页面的反应确认。
   每个基线按构造都是 0%。
 * **Loop% / Repeat% / Corner%** 是失败检测器的逐步触发率；见 §7。
 * **Latency** 是模型调用耗时。基线没有模型调用，所以按定义延迟为 0。
 
-## 10. 我们学到了什么？
+## 10. 关于 Jev，我们学到了什么？
 
-十二个问题，答案来自上面的表和逐步日志 —— 先问 jev，再问 laya，
-最后是两个模型合起来对 harness 说明了什么。两个模型收到的 state 逐字节相同，
-所以下面每一处差异都是模型本身的差异。
-
-### jev：state 设计就是全部故事
+十二个问题，答案来自上面的表和逐步日志。
 
 **1. 只给棋盘，jev 能走多远？**
 哪儿也去不了。`jev-board` 平均 **22.7**，最大方块 **6.7** —— 它通常根本没合并过任何东西。
@@ -680,98 +601,10 @@ heuristic 一局走 404 步，其中 10% 摸到 1024，而 jev 各模式要么�
 
 **12. 更多上下文在哪里不再能替代搜索？**
 大致在 greedy 这条线上。一层确定性评估就足以把 jev 从「不会玩」带到「按每步算，
-和一层分数贪心一样好」。但不足以摸到 1024：除 `features` 之外的每个 jev 设计都没能越过
-最大方块 128，而特征辅助的那一个一半对局摸到 512，一局都没到 1024。heuristic 在 1024+ 上的
+和一层分数贪心一样好」。但不足以摸到 1024：除了特征辅助的那个，每个 jev 模式都没能越过
+最大方块 128，而特征辅助的那个一半对局摸到 512，一局都没到 1024。heuristic 在 1024+ 上的
 优势来自多走了三倍步数，那是局面的性质，不是任何单步的性质 ——
 这个实验里再多的单步上下文也没能把它补回来。
-
-### laya：state 设计几乎无关紧要
-
-同样十二个问题，问的是这个本地 checkpoint。同样的种子、同样的设计、同样的 state、
-同样的候选标签 —— 而答案的形状完全不同。
-
-**1–2. 只给棋盘，显式状态有帮助吗？**
-没有，而且*没有 —— 反而有害*。`laya-board` 平均 **29.5**，最大方块 6.5；加上显式计数器
-之后掉到 **6.5**，是全部十三行里最差的，最大方块也从 6.5 降到 3.8。那个把 jev 分数乘以
-26 的干预，把 laya 的分数除以了 4.5。
-
-**3. 历史能打破循环吗？**
-不能，而且循环本来就是彻底的：`laya-board` 在 200 步上限里 **193.9** 步走同一个方向，
-`laya-history` **164.1** 步，`laya-state-history` **200.0** 步 —— 整局。
-
-**4. 一层特征买到了什么？**
-几乎没有。`laya-features` 是 laya 最好的模式，**37.0**，最大方块 **9.0**：
-它仍然从没越过 16，**94.2%** 的移动是非法的。那个把 jev 带到 91.7% 对局摸到 256 的设计，
-把 laya 带到了 0%。
-
-**5–6. 比 random 或 greedy 好吗？**
-不。random 平均 **1010**，greedy **2984.8**；laya 最好的模式平均 **37.0**。
-每一行 laya 都比 random 低 27 到 155 倍。
-
-**7. 离 heuristic 有多远？**
-**5814.2 / 37.0 ≈ 157 倍。** 没有每步效率可比，因为 laya 几乎轮不到走合法移动：
-它一局完成 **11.6** 步合法移动（jev-features 是 272），每次合法移动得 **3.18** 分
-（jev-features 是 **13.87**）。
-
-**8. 它在哪里失败？**
-处处都失败，而且方式很具体。五个设计里 laya 最多用到四个方向中的**两个**，
-在 `laya-features` 里它 **99%** 的移动只用一个方向。每个设计的非法移动都是 94–98%；
-重复状态步数 92–96%。
-
-**9. 它能用历史跳出局部最优吗？**
-不能。历史没有缩短固着 —— 只给棋盘 **193.9** 步走一个方向，给历史 **164.1** 步，
-计数器加历史 **200.0** 步 —— 而且五个设计里有两个整局只用一个方向。
-`laya-features` **99%** 的移动只用一个方向。
-
-**10. 它擅长权衡多个局部指标吗？**
-测量说明它根本没在读这些指标。后验几乎是均匀的 —— `laya-features` 上熵为
-**2.00 bit 里的 1.97**，`laya-board` 上 **1.96**，置信度中位数 **0.014**。
-一个答案是 1.97/2.00 均匀分布的模型，等于几乎与它看到的东西无关地在作答，
-这正是 `laya-test/CALIBRATION.md` 测到的结论：这个 checkpoint 读不了 4×4 网格。
-
-**11. 哪些信息值得让 harness 去算？**
-对这个模型来说：**一个都不值**。五个设计分布在 6.5 到 37.0 之间，全部远低于 random，
-而额外的 state 即便有影响也是反作用 —— 它把 prompt 拉长，而标定已经测过，
-证据超过约 40 个词之后信号就崩到随机水平。
-
-**12. 上下文在哪里不再能替代搜索？**
-这个问题不成立。这里上下文从来没有替代过任何东西：在合法移动上抛硬币所设定的地板之下，
-laya 在每个设计、每种 prompt 长度上都待着。
-
-### 合起来看：state 设计不是模型无关的
-
-这是两个模型合起来才产生的结果，而它并不是任何一个模型单独能给出的结果。
-
-| 设计 | jev | laya |
-|---|---|---|
-| `board` | 22.7 | 29.5 |
-| `state` | **593.7** | 6.5 |
-| `history` | 462.3 | 31.5 |
-| `features` | **3781.7** | 37.0 |
-| `state-history` | 779.7 | 8.0 |
-
-同一个把 jev 分数乘以 26 的 state 块，对 laya 毫无作用。那个把 jev 从 22.7 带到 3781.7
-的设计 —— 167 倍的摆动 —— 只把 laya 从 29.5 挪到 37.0，还在 8 局样本的噪声范围内，
-而且两者都远低于 `random`。
-
-所以「harness 该为模型算什么？」**没有与模型无关的答案**。harness 的 state 设计不是一根对
-任何模型都有效的杠杆；它是一根对「能读懂交给它的 state 的模型」有效的杠杆。这里两个模型同样
-读不懂一个裸网格（97.2% 和 95.0% 的非法移动），而只有其中一个能读懂计数器和特征块。
-这个差异是 checkpoint 的性质，不是 harness 的。
-
-两个实际后果，每一个学到都要付出代价：
-
-* **在一个模型上验证过的 harness 设计不会迁移。** 要衡量设计的价值就必须有模型，
-  而第二个模型可能把排序反过来。
-* **harness 能做的最便宜的有用之事不是特征块 —— 而是说明什么合法。** 在没有任何地方写明
-  合法性时，两个模型都固着在一个方向上，把 94–98% 的移动浪费在非法移动上。`features`
-  是唯一带 `valid` 标志的设计，也是唯一让任一模型的非法率降到 0% 的设计。这个混淆在上面
-  jev 的回答里（第 10 问）已经点出，这里也是同一个混淆。
-
-这个实验不能说的是：如果给 laya 它能读懂的 state，它会不会玩得好。这里的每个设计都是把
-2048 棋盘渲染成数字，而 `CALIBRATION.md` 早已测过，这个 checkpoint 不读网格上的数字。
-一个用短散文表述的设计 —— 标定发现它*能*用的形式，在七选一 triage 上达到 71.4% ——
-是显而易见的下一步实验，而这张表回答不了它。
 
 ---
 
@@ -781,20 +614,16 @@ laya 在每个设计、每种 prompt 长度上都待着。
 .                          上游 2048 游戏（index.html、js/、style/、meta/）
 ├── readme.md              本文件              readme-cn.md  中文版
 ├── README-2048.md         上游游戏自己的 readme
-├── prompt.md              本次实验所依据的任务说明（中文）
 ├── laya-test/             实验复用的既有控制代码：
 │                            game_client.py    黑盒页面客户端（DOM + localStorage）
 │                            reference2048.py  独立规则引擎，用作模拟器
 │                            run_tests.py      本仓库自己的差分测试套件
 ├── jev-test/jev_client.py 加载 jev 自己的 model.py 的加载器，以及 .env 读取器
 └── jev-lab/               实验本体
-    ├── prompts.py         五个 state 设计 —— 两个模型共用，也就是那个变量
     ├── game/              adapter（页面控制）· state（观测）· simulator（规则）
-    ├── jev/               client：远程模型的决策层
-    ├── laya/              client：本地模型的决策层
-    ├── players/           model_player.py（共用基类）· jev_player.py · laya_player.py
-    │                      以及每个模型 × 设计一个 5 行绑定：
-    │                      jev_board.py … jev_state_history.py, laya_board.py … laya_state_history.py
+    ├── jev/               client（唯一的决策层）· prompts（每个模式一个构造器）
+    ├── players/           random · greedy · heuristic · jev_board · jev_state · jev_history ·
+    │                      jev_features · jev_state_history
     ├── analysis/          features · failure_detector · metrics · report
     ├── runner/            browser · game_server · game_loop · interactive · benchmark
     ├── ui/                dashboard（server + page）
@@ -808,20 +637,11 @@ laya 在每个设计、每种 prompt 长度上都待着。
 
 * Python 3.10+，装有 `playwright` 和 Chromium（`pip install playwright &&
   playwright install chromium`）。
-* **一个模型，或者两个都不要。** `demo.py --mode random` 和其他基线什么都不需要。
-  * `jev` 各模式需要 `TYPESAFE_API_KEY`，从 `$JEV_REPO/.env`（默认
-    `/Users/scavin/Documents/Github/Jev`）或环境变量读取，还需要那里的
-    [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) checkout
-    （用 `JEV_REPO` 覆盖）。
-  * `laya` 各模式需要 `/Users/scavin/Documents/models/laya/AGENTS.md` 里描述的本地安装，
-    以及它的决策服务器正在运行：
-
-    ```bash
-    /Users/scavin/Documents/models/laya/.venv/bin/python laya-test/laya_server.py --port 8791
-    ```
-
-    用 `LAYA_HOME` 覆盖安装位置，或用 `LAYA_HOST` / `LAYA_PORT` 覆盖 endpoint。
-    如果服务器没有应答，`demo.py` 会原样打印这条命令，并以 2 退出。
+* jev 各模式需要 `TYPESAFE_API_KEY` —— 从 `$JEV_REPO/.env`（默认
+  `/Users/scavin/Documents/Github/Jev`）或环境变量读取。`demo.py --mode random` 和其他基线
+  不需要凭据，`demo.py` 会直接说明这一点，而不是抛出难懂的失败。
 * 2048 页面在 `http://127.0.0.1:8792`。你不必自己启动它：`demo.py` 会检查，
   并在该端口没有服务时自己起一个静态服务器。`run.py` 和 `benchmark.py` 假定它已经在运行，
   因为批量任务不应该悄悄占有一个服务器。
+* 如果 [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) 的 checkout
+  不在 `/Users/scavin/Documents/Github/Jev`，需要设置 `JEV_REPO`。

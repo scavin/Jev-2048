@@ -14,71 +14,33 @@ The brief this was built against is kept in [prompt.md](prompt.md) (Chinese): it
 repository is answering, and it is worth reading next to §10 to see what was asked for and
 what the data actually said.
 
-The experiment has two axes. The **state design** is the one being measured and is shared by
-both models; the **model** is the other axis, and a mode name says both:
+The model never changes. Every jev mode in here is the same model, the same endpoint, the
+same rules text and the same four candidate labels. The only thing that changes is **what
+the harness shows it**:
 
-| design | the state handed over |
+| mode | the state handed to jev |
 |---|---|
-| `board` | the 4×4 board, nothing else |
-| `state` | + score, max tile, empties, last move, recent moves, step, invalid attempts |
-| `history` | + the last 16 actions, recent board digests, how often this shape has appeared |
-| `features` | + the harness's own one-ply simulation of all four directions |
-| `state-history` | `state` **and** `history` together |
+| `jev-board` | the 4×4 board, nothing else |
+| `jev-state` | + score, max tile, empties, last move, recent moves, step, invalid attempts |
+| `jev-history` | + the last 16 actions, recent board digests, how often this shape has appeared |
+| `jev-features` | + the harness's own one-ply simulation of all four directions |
+| `jev-state-history` | `jev-state` **and** `jev-history` together |
 
-| model | what it is | needs | latency |
-|---|---|---|---|
-| `jev` | remote typed-choice model, over TypeSafe | `TYPESAFE_API_KEY` | ~350 ms |
-| `laya` | local checkpoint (ModernBERT-large, MPS) | the local server on `127.0.0.1:8791` | 60–400 ms |
+The fifth condition exists because the four required modes do not compare cleanly. Mode 3 is
+specified as the board plus history, so moving from mode 2 to mode 3 adds history *and drops
+mode 2's counters* — two changes at once. `jev-state-history` holds the counters fixed and
+adds history on top, which is what isolates the effect of history itself.
 
-So there are ten modes, and `laya-features` is laya given the harness's one-ply simulation
-while `jev-features` is jev given exactly the same thing, byte for byte. Switching is only the
-mode name; nothing else in the harness knows which model is deciding.
-
-The `state-history` design exists because the four required designs do not compare cleanly.
-Mode 3 of the brief is specified as the board plus history, so moving from `state` to `history`
-adds history *and drops the counters* — two changes at once. `state-history` holds the
-counters fixed and adds history on top, which is what isolates the effect of history itself.
-
-Three deterministic baselines (`random`, `greedy`, `heuristic`) play the same games so the
-model numbers have something to be compared against.
+Three deterministic baselines (`random`, `greedy`, `heuristic`) run the same games so the
+jev numbers have something to be compared against.
 
 The question the whole thing exists to answer:
 
-> As the harness hands the model more of the work, where does its ability stop improving — and
-> at what point does more context stop substituting for planning?
+> As the harness hands jev more of the work, where does its ability stop improving — and at
+> what point does more context stop substituting for planning?
 
-Nothing in this repository encodes an expected winner. The comparison table is generated from
-the logs; if a mode loses to `greedy`, the table says so.
-
-### One constraint, measured rather than assumed
-
-**laya is not thread-safe on MPS.** Two overlapping calls race the Metal command buffer and
-take the whole server down — a 12-way burst killed it with
-
-```
--[_MTLCommandBuffer commit]:691: failed assertion `commit command buffer with uncommitted encoder'
-failed assertion _status < MTLCommandBufferStatusCommitted at line 323 in -[IOGPUMetalCommandBuffer setCurrentCommandEncoder:]
-```
-
-So the client serializes every call behind one gate — a `flock` taken on a fresh descriptor, so
-it covers this process's threads and any other process alike — and the benchmark collapses
-`--workers` to 1 for laya modes, because concurrent games would only queue on the one local
-model anyway. Concurrency in the lab must never become concurrency at the model.
-
-### What the two models are asked, and what was checked
-
-Both get the same `state`, the same criteria and the same instructions. That is not a
-promise — it is verified: after the two-model split, all 11,050 prompts recorded in the
-published jev run rebuild byte-identically from the same state, so the jev numbers in §9 still
-describe exactly what jev was sent.
-
-A prior worth knowing before reading the laya results. `laya-test/CALIBRATION.md` measured this
-checkpoint on this machine and found that it **cannot read a 4×4 number grid**: a four-way
-question over a board came back at chance (50%), answering `in_progress` for a full board with
-no equal neighbours and `won` for a two-tile fresh board. It also found that confidence stays
-near zero even on correct answers, and that evidence beyond ~40 words collapses the signal to
-chance. The `board` design hands laya exactly such a grid and asks for a direction, so the
-calibration is a prediction this experiment can test.
+Nothing in this repository encodes an expected winner. The comparison table is generated
+from the logs; if a jev mode loses to `greedy`, the table says so.
 
 ---
 
@@ -90,28 +52,16 @@ python demo.py
 ```
 
 That is the whole thing. No arguments. It checks whether the 2048 page is being served
-(starting a static server itself if it is not, and stopping only the one it started), checks
-that the model the mode needs is reachable, opens a visible Chromium window on the game, opens
-the live panel in your browser, and then plays one game after another — fresh seed each time,
-for as long as you leave it running.
-
-The default mode is `laya-features`, which is the local model: no API key, but it does need
-the decision server from §12 running. If it is not, `demo.py` prints the command that starts
-it and exits 2 rather than failing halfway through a game. `--mode jev-features` uses the
-remote model instead, and `--mode random` needs no model at all.
+(starting a static server itself if it is not, and stopping only the one it started), opens a
+visible Chromium window on the game, opens the live panel in your browser, and then plays
+one game after another — fresh seed each time, for as long as you leave it running.
 
 ```
-  game 1 finished: max_steps after 12 moves, score 0, max tile 4
-    best 0 (game 1, laya-features) · 1 played · avg 0 · 256+ 0/1
-  game 2 finished: max_steps after 12 moves, score 32, max tile 8
-    best 32 (game 2, laya-features) · 2 played · avg 16 · 256+ 0/2
-  ...
-stopped after 6 games.
-  laya-features      games 6   avg score 11      median 4       best 32     max tile 5     256+  0.0%
+  game 1 finished: max_steps after 25 moves, score 56, max tile 8
+    best 56 (game 1, jev-board) · 1 played · avg 56 · 256+ 0/1
+  game 2 finished: max_steps after 25 moves, score 112, max tile 16
+    best 112 (game 2, jev-features) · 2 played · avg 84 · 256+ 0/2
 ```
-
-Those are real numbers from a real run, and they are the honest first impression: the local
-model plays badly, and §9 says why. `--mode jev-features` is the other model, and it plays.
 
 Stop it with **Ctrl-C**, or just **close the game window** — both close the log, shut down the
 browser and print the summary. A game interrupted halfway keeps the moves it actually made.
@@ -174,11 +124,8 @@ Reused as-is:
   harness thinks this move is legal" and "the page agrees" stay two separate statements.
 * **`jev-test/jev_client.py`** — the loader that imports `jev_ultrafast/model.py` without
   pulling in the browser agent.
-* **`browser-use/jev-ultrafast`** — `model.post_json` and `model.validate_choice`. Every jev
+* **`browser-use/jev-ultrafast`** — `model.post_json` and `model.validate_choice`. Every
   decision in this lab travels the same two functions the shipped browser agent uses.
-* **`laya-test/laya_server.py` + `laya-test/laya_client.py`** — the persistent local decision
-  server and its thin client, already in this repository. The lab speaks the same protocol it
-  speaks, so a laya decision travels the same path the repo's own test suite uses.
 
 Added by the lab: the seeded browser session, the state builders, the baselines, the failure
 detectors, the metrics, the dashboard and the runners.
@@ -243,8 +190,8 @@ zero failures; without it, roughly a third of concurrent games aborted.
 
 ## 2. The one variable
 
-Every mode sends the same `instructions` block and the same four candidate labels, for both
-models. Only `state` and `criteria` differ.
+Every mode sends the same `instructions` block and the same four candidate labels. Only
+`state` and `criteria` differ.
 
 ```text
 goal:  Avoid game over and reach the highest tile possible.
@@ -258,7 +205,7 @@ All four directions are always offered, including illegal ones. Legality is info
 harness may or may not supply — which is what makes the invalid-move rate a real
 measurement rather than a constant zero.
 
-### Design 1 — `board` (`jev-board` / `laya-board`)
+### Mode 1 — `jev-board`
 
 ```text
 Current 2048 board:
@@ -279,7 +226,7 @@ Goal:
 Avoid game over and reach the highest tile possible.
 ```
 
-### Design 2 — `state` (`jev-state` / `laya-state`)
+### Mode 2 — `jev-state`
 
 ```text
 Board:
@@ -299,7 +246,7 @@ Recent invalid moves: RIGHT x2
 Repeated move pattern: no
 ```
 
-### Design 3 — `history` (`jev-history` / `laya-history`)
+### Mode 3 — `jev-history`
 
 ```text
 Board:
@@ -321,7 +268,7 @@ Invalid RIGHT attempts recently: 2
 
 The history mode states facts and stops there. It never says what to do about a repeat.
 
-### Design 4 — `features` (`jev-features` / `laya-features`)
+### Mode 4 — `jev-features`
 
 The harness simulates each direction one ply ahead and reports measurements of the board it
 produces. One ply only: no two-step lookahead, no search, no rollout.
@@ -354,7 +301,7 @@ Feature definitions (all deterministic, all on the slid board, the spawn is neve
   one of them "the big tile" would invent a corner strategy the player has not started.
 * `changed_cells` — cells that differ from the board before the move.
 
-### Design 5 — `state-history` (`jev-state-history` / `laya-state-history`)
+### Mode 5 — `jev-state-history`
 
 Mode 2's block followed by mode 3's block, with nothing else changed. Same two blocks, same
 order, no extra advice:
@@ -393,7 +340,7 @@ Recent action pattern: RIGHT, LEFT, RIGHT, LEFT, RIGHT, DOWN
 The heuristic uses nneonneo's published weights for empty cells (2.7), monotonicity (1.0) and
 smoothness (0.1), plus three additions: a corner bonus of `log2(max tile)`, 0.6 per merge
 available after the move, and 1.0 per legal direction. None of these were tuned on this
-benchmark, and none of them are visible to any mode that uses a model.
+benchmark, and none of them are visible to any jev mode.
 
 All three baselines only ever pick a legal direction, so their invalid-move rate is zero by
 construction.
@@ -483,20 +430,14 @@ moved around. `action_valid` is the simulator's verdict; `page_reacted` is what 
 actually did. When those two disagree, the step is tagged `harness_desync` — that would mean
 the harness is wrong about the game, not that jev is.
 
-The five logs behind the results in §9 are committed gzipped, because every number in that
+The three logs behind the results in §9 are committed gzipped, because every number in that
 table and in §10 is derived from them:
 
 ```bash
 cd jev-lab
 for f in logs/*.jsonl.gz; do gzip -dc "$f" | head -1 | python3 -m json.tool; done   # one step
-gzip -dc logs/jev.jsonl.gz | wc -l      # 11050 steps
-gzip -dc logs/laya-a.jsonl.gz | wc -l   # 4800
+gzip -dc logs/jev.jsonl.gz | wc -l                                                  # 11050 steps
 ```
-
-The decision-layer fields are named `jev_probabilities`, `jev_confidence`, `jev_attempts`,
-`jev_model` and `jev_usage`. Those names are historical: the field holds whatever the deciding
-model returned, and for a `laya-*` mode it holds laya's. Renaming them would have invalidated
-the already-published jev logs, so they stay and this note says what they mean.
 
 ---
 
@@ -526,24 +467,20 @@ silent on a clean game.
 ```bash
 cd jev-lab
 
-# watch it play, forever (see §0). laya is local; jev needs a key.
+# watch it play, forever (see §0)
 python demo.py
-python demo.py --mode jev-features
-python demo.py --mode laya-state,laya-features   # alternate, to see the difference
-python demo.py --mode random                     # no model at all
 
 # one game, visible browser, live panel
-python run.py --mode laya-board
+python run.py --mode jev-board
 python run.py --mode jev-features --speed 1
 python run.py --mode jev-history --cdp http://127.0.0.1:9222   # drive an existing Chrome
-python run.py --mode laya-board --games 0                      # until stopped
+python run.py --mode jev-board --games 0                       # until stopped
 
 # batch
 python benchmark.py --mode random     --games 100 --headless
 python benchmark.py --mode greedy     --games 100 --headless
 python benchmark.py --mode heuristic  --games 100 --headless
-python benchmark.py --mode laya-board    --games 100 --headless
-python benchmark.py --mode jev-board     --games 100 --headless
+python benchmark.py --mode jev-board    --games 100 --headless
 python benchmark.py --mode jev-state    --games 100 --headless
 python benchmark.py --mode jev-history  --games 100 --headless
 python benchmark.py --mode jev-features --games 100 --headless
@@ -573,9 +510,8 @@ drawing a bar. Nothing on the panel is invented.
 
 ## 9. Results
 
-Five runs, one seed, one page, one rules text, one set of candidate labels. Every game
-navigates to `index.html?seed=N`, so the spawn stream is a function of `N` alone and game `i`
-of every mode faces the same stream.
+Three runs, same seed, same page, same rules text, same model. Every game navigates to
+`index.html?seed=N` and the spawn stream is a function of `N` alone.
 
 ```bash
 cd jev-lab
@@ -584,20 +520,14 @@ cd jev-lab
 python benchmark.py --mode random,greedy,heuristic --games 20 \
   --seed 123 --headless --workers 6 --max-steps 2000 --tag baseline
 
-# jev: capped at 300 moves, because it does not reliably finish
+# the model: capped at 300 moves, because it does not reliably finish
 python benchmark.py --mode jev-board,jev-state,jev-history,jev-features --games 12 \
   --seed 123 --headless --workers 4 --max-steps 300 --tag jev
 python benchmark.py --mode jev-state-history --games 12 \
   --seed 123 --headless --workers 4 --max-steps 300 --tag jev-sh
 
-# laya: one local model, so the client serializes and workers collapse to 1
-python benchmark.py --mode laya-board,laya-state,laya-history --games 8 \
-  --seed 123 --headless --max-steps 200 --tag laya-a
-python benchmark.py --mode laya-features,laya-state-history --games 8 \
-  --seed 123 --headless --max-steps 200 --tag laya-b
-
 python analysis/report.py results/baseline_summary.json results/jev_summary.json \
-  results/jev-sh_summary.json results/laya-a_summary.json results/laya-b_summary.json
+  results/jev-sh_summary.json
 ```
 
 | Mode | Games | Scored | Abort% | Avg Score | Median | P90 | Max | Avg Steps | Max Tile | 256% | 512% | 1024% | 2048% | 4096% | Invalid% | Loop% | Repeat% | Corner% | Collapse% | Trap% | Stagnation% | Avg Lat ms | P50 ms | P95 ms |
@@ -610,37 +540,25 @@ python analysis/report.py results/baseline_summary.json results/jev_summary.json
 | jev-history | 12 | 12 | 0.0 | 462.3 | 458.0 | 685.6 | 1036 | 261.7 | 53.3 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 74.20% | 0.06% | 68.41% | 0.16% | 0.00% | 0.57% | 60.86% | 487.2 | 362.6 | 967.6 |
 | jev-features | 12 | 12 | 0.0 | 3781.7 | 4282.0 | 4555.6 | 4564 | 272.6 | 373.3 | 91.7 | 50.0 | 0.0 | 0.0 | 0.0 | 0.00% | 0.86% | 0.00% | 2.57% | 0.03% | 1.86% | 0.00% | 425.5 | 354.4 | 779.0 |
 | jev-state-history | 12 | 12 | 0.0 | 779.7 | 736.0 | 1182.8 | 1356 | 171.3 | 77.3 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 44.55% | 0.83% | 38.33% | 0.39% | 0.15% | 2.38% | 28.26% | 558.6 | 366.8 | 1216.1 |
-| laya-board | 8 | 8 | 0.0 | 29.5 | 12.0 | 66.4 | 128 | 200.0 | 6.5 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 95.00% | 0.00% | 93.50% | 0.06% | 0.00% | 0.00% | 93.75% | 84.3 | 82.7 | 99.8 |
-| laya-state | 8 | 8 | 0.0 | 6.5 | 6.0 | 10.4 | 16 | 200.0 | 3.8 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 98.00% | 0.00% | 96.31% | 0.00% | 0.00% | 0.00% | 97.00% | 107.1 | 106.2 | 120.9 |
-| laya-history | 8 | 8 | 0.0 | 31.5 | 6.0 | 79.2 | 152 | 200.0 | 5.8 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 95.63% | 0.44% | 93.06% | 0.00% | 0.00% | 0.00% | 88.25% | 204.5 | 205.9 | 227.3 |
-| laya-features | 8 | 8 | 0.0 | 37.0 | 42.0 | 59.6 | 68 | 200.0 | 9.0 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 94.19% | 0.00% | 92.69% | 0.06% | 0.00% | 0.00% | 92.69% | 113.3 | 111.4 | 125.7 |
-| laya-state-history | 8 | 8 | 0.0 | 8.0 | 4.0 | 17.6 | 40 | 200.0 | 3.8 | 0.0 | 0.0 | 0.0 | 0.0 | 0.0 | 97.88% | 0.00% | 95.94% | 0.00% | 0.00% | 0.00% | 96.94% | 227.0 | 225.9 | 262.1 |
 
 Reading the table:
 
 * **Games / Scored / Abort%** — a game the harness aborted (dropped connection, page that
   never loaded) is a truncated game, not a result, so it is excluded from the score, step and
-  tile statistics and counted here instead. All five runs finished with **0% aborts**.
-* **Avg Steps** is capped: 2000 for the baselines, 300 for the jev modes, 200 for the laya
-  modes. The cap never bound a baseline game (the longest was 719 moves) and it bound only
-  some jev games — but it bound **every single laya game**, so every laya score is a lower
-  bound on a game that was still going. `--max-steps` is a budget, not a game rule; the jev
-  and laya caps differ because the local model is slower per step and its games never end.
-* **Sample sizes differ** for the same reason: 20 baseline games, 12 per jev mode, 8 per laya
-  mode. Every mode uses `--seed 123`, so game `i` of any two modes faces the same spawn
-  stream.
+  tile statistics and counted here instead. Both runs finished with **0% aborts**.
+* **Avg Steps** is capped at 300 for every jev row and at 2000 for the baselines. The cap
+  never bound a baseline game (the longest was 719 moves); it bound 12/12 of `jev-board`,
+  7/12 of `jev-features`, 9/12 of `jev-history` and 3/12 of `jev-state-history`. A capped jev
+  score is therefore a **lower bound**, and `jev-board`'s 300 moves produced a board with a
+  largest tile of 4 in most games.
 * **Invalid%** is the share of moves the game ignored, measured by the simulator and
   confirmed against the page's reaction. Every baseline is 0% by construction.
 * **Loop% / Repeat% / Corner%** are per-step rates of the failure detectors; see §7.
 * **Latency** is the model call. Baselines have none, so their latency is 0 by definition.
 
-## 10. What did we learn?
+## 10. What did we learn about Jev?
 
-Twelve questions, answered from the table above and from the per-step logs — first for jev,
-then for laya, then what the two together say about the harness. The two models were sent the
-same state, byte for byte, so every difference below is a difference in the model.
-
-### jev: the state design is the whole story
+Twelve questions, answered from the table above and from the per-step logs.
 
 **1. Board only, how far does jev get?**
 Nowhere. `jev-board` averages **22.7** with a largest tile of **6.7** — it usually never
@@ -729,105 +647,11 @@ than nothing. The cheapest useful thing the harness can do is tell jev which mov
 **12. Where does more context stop substituting for search?**
 At roughly the greedy line. One ply of deterministic evaluation is enough to get jev from
 "cannot play" to "as good as one-ply score greed, per move". It is not enough to reach 1024:
-every jev design except `features` fails to get past a largest tile of 128, and
+every jev mode except the feature-assisted one fails to get past a largest tile of 128, and
 the feature-assisted one reaches 512 in half its games and 1024 in none. The heuristic's
 advantage at 1024+ comes from playing three times as many moves, which is a property of the
 position, not of any single move — and no amount of extra single-step context in this
 experiment recovered it.
-
-### laya: the state design barely matters
-
-The same twelve questions, for the local checkpoint. Same seed, same designs, same state, same
-candidate labels — and a completely different shape of answer.
-
-**1–2. Board only, and does explicit state help?**
-No, and *no — it hurts*. `laya-board` averages **29.5** with a largest tile of 6.5; adding the
-explicit counters takes it to **6.5**, the worst of all thirteen rows, with its largest tile
-falling from 6.5 to 3.8. The intervention that multiplied jev's score by 26 divides laya's by
-4.5.
-
-**3. Does history break loops?**
-No, and the loops are already total: `laya-board` **193.9** moves on one direction out of a
-200-move cap, `laya-history` **164.1**, `laya-state-history` **200.0** — the whole game.
-
-**4. What do one-ply features buy?**
-Almost nothing. `laya-features` is the best laya mode at **37.0** and its largest tile is
-**9.0**: it still never gets past 16, and **94.2%** of its moves are illegal. The design that
-took jev to 91.7% of games reaching 256 takes laya to 0%.
-
-**5–6. Better than random or greedy?**
-No. Random averages **1010** and greedy **2984.8**; the best laya mode averages **37.0**. Every
-laya row is between 27× and 155× below random.
-
-**7. How far from the heuristic?**
-**5814.2 / 37.0 ≈ 157×.** There is no per-move efficiency to compare, because laya barely gets
-to make a legal move: it completes **11.6** legal moves per game against jev-features' 272, and
-scores **3.18** per legal move against jev-features' **13.87**.
-
-**8. Where does it fail?**
-Everywhere, and in one specific way. Across all five designs laya uses at most **two** of the
-four directions, and in `laya-features` it uses **one** for **99%** of its moves. Invalid
-moves are 94–98% in every design; repeated-state steps 92–96%.
-
-**9. Can it use history to escape a local optimum?**
-No. History does not shorten the fixation — **193.9** moves on one direction with the board
-alone, **164.1** with history, **200.0** with counters plus history — and in two of the five
-designs it plays the entire game on a single direction. `laya-features` is one direction for
-**99%** of its moves.
-
-**10. Is it good at trading off several local metrics?**
-The measurement says it is not reading them at all. The posterior is nearly uniform — entropy
-**1.97 of a possible 2.00 bits** on `laya-features` and **1.96** on `laya-board`, with median
-confidence **0.014**. A model whose answer is 1.97/2.00 uniform is answering almost
-independently of what it was shown, which is exactly what `laya-test/CALIBRATION.md` found when
-it measured that this checkpoint cannot read a 4×4 grid.
-
-**11. Which information is worth the harness computing?**
-For this model: **none of it**. The five designs span 6.5 to 37.0, all of them far below
-random, and the extra state is if anything counterproductive — it lengthens the prompt, and the
-calibration already measured that evidence beyond ~40 words collapses the signal to chance.
-
-**12. Where does context stop substituting for search?**
-The question does not arise. Context was never substituting for anything here: laya is below
-the floor set by a coin flip over legal moves, in every design, at every prompt length.
-
-### Together: the state design is not model-independent
-
-This is the result the two models produce jointly, and it is not the one either produces alone.
-
-| design | jev | laya |
-|---|---|---|
-| `board` | 22.7 | 29.5 |
-| `state` | **593.7** | 6.5 |
-| `history` | 462.3 | 31.5 |
-| `features` | **3781.7** | 37.0 |
-| `state-history` | 779.7 | 8.0 |
-
-The same state block that multiplies jev's score by 26 does nothing for laya. The design that
-takes jev from 22.7 to 3781.7 — a 167× swing — moves laya from 29.5 to 37.0, inside the noise
-of a 8-game sample, and both are far below `random`.
-
-So "what should the harness compute for the model?" has **no model-independent answer**. The
-harness's state design is not a lever that works on any model; it is a lever that works on a
-model that can read the state it is given. Both models here are equally unable to read a bare
-grid (97.2% and 95.0% illegal moves), and only one of them can read the counters and the
-feature block. That difference is a property of the checkpoints, not of the harness.
-
-Two practical consequences, both of which cost something to learn:
-
-* **A harness design validated on one model does not transfer.** Measuring the design's value
-  requires the model, and a second model can invert the ranking.
-* **The cheapest useful thing a harness can do is not a feature block — it is to say what is
-  legal.** Both models fixate on one direction and waste 94–98% of their moves on illegal ones
-  when nothing states legality. `features` is the only design that carries a `valid` flag, and
-  it is the only design under which either model's invalid rate reaches 0%. That confound is
-  called out in the jev answers above (question 10) and it is the same confound here.
-
-What this experiment cannot say: whether laya would play well given state it *can* read. Every
-design here is a 2048 board rendered as numbers, and `CALIBRATION.md` had already measured that
-this checkpoint does not read numbers on a grid. A design phrased as short prose — the shape the
-calibration found it *can* use, at 71.4% on seven-way triage — is the obvious next experiment,
-and it is not one this table answers.
 
 ---
 
@@ -844,13 +668,10 @@ and it is not one this table answers.
 │                            run_tests.py      the repo's own differential suite
 ├── jev-test/jev_client.py the loader for jev's own model.py, and the .env reader
 └── jev-lab/               the experiment
-    ├── prompts.py         the five state designs — shared by both models, the variable
     ├── game/              adapter (page control) · state (observation) · simulator (rules)
-    ├── jev/               client: the remote model's decision layer
-    ├── laya/              client: the local model's decision layer
-    ├── players/           model_player.py (the shared base) · jev_player.py · laya_player.py
-    │                      and one 5-line binding per model × design:
-    │                      jev_board.py … jev_state_history.py, laya_board.py … laya_state_history.py
+    ├── jev/               client (the only decision layer) · prompts (one builder per mode)
+    ├── players/           random · greedy · heuristic · jev_board · jev_state · jev_history ·
+    │                      jev_features · jev_state_history
     ├── analysis/          features · failure_detector · metrics · report
     ├── runner/            browser · game_server · game_loop · interactive · benchmark
     ├── ui/                dashboard (server + page)
@@ -864,20 +685,11 @@ and it is not one this table answers.
 
 * Python 3.10+ with `playwright` and Chromium installed (`pip install playwright &&
   playwright install chromium`).
-* **One model, or neither.** `demo.py --mode random` and the other baselines need nothing.
-  * `jev` modes need `TYPESAFE_API_KEY`, read from `$JEV_REPO/.env` (default
-    `/Users/scavin/Documents/Github/Jev`) or from the environment, and the
-    [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast) checkout there
-    (override with `JEV_REPO`).
-  * `laya` modes need the local installation described in
-    `/Users/scavin/Documents/models/laya/AGENTS.md` and its decision server running:
-
-    ```bash
-    /Users/scavin/Documents/models/laya/.venv/bin/python laya-test/laya_server.py --port 8791
-    ```
-
-    Override the location with `LAYA_HOME`, or the endpoint with `LAYA_HOST` / `LAYA_PORT`.
-    `demo.py` prints exactly this command if the server is not answering, and exits 2.
+* `TYPESAFE_API_KEY` for the jev modes — read from `$JEV_REPO/.env` (default
+  `/Users/scavin/Documents/Github/Jev`) or from the environment. `demo.py --mode random` and
+  the other baselines need no credentials, and `demo.py` says so instead of failing obscurely.
 * The 2048 page on `http://127.0.0.1:8792`. You do not have to start it: `demo.py` checks and
   starts a static server itself when nothing is serving that port. `run.py` and
   `benchmark.py` assume it is already there, since a batch should not quietly own a server.
+* `JEV_REPO` if the [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)
+  checkout is not at `/Users/scavin/Documents/Github/Jev`.

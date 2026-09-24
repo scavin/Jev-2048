@@ -6,4 +6,4 @@ from players.jev_player import JevPlayer
 
 
 class JevStatePlayer(JevPlayer):
-    design = "state"
+    mode = "jev-state"
