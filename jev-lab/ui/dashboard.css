@@ -353,7 +353,10 @@ body {
 .btn:hover { border-color: var(--accent); }
 .btn:active { transform: translateY(1px); }
 .btn-primary { background: #16513c; border-color: var(--accent); color: #eafff5; }
+.btn-active { background: #16513c; border-color: var(--accent); color: #eafff5; }
 .btn-danger:hover { border-color: var(--warn); color: var(--warn); }
+
+.human-hint { color: var(--dim); font-size: 13px; letter-spacing: 1px; }
 
 .speed { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
 

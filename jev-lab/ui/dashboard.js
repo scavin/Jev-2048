@@ -29,6 +29,15 @@ const dom = {
   features: document.getElementById("features"),
   controlStatus: document.getElementById("control-status"),
   speed: document.getElementById("speed"),
+  btnManual: document.getElementById("btn-manual"),
+  btnAuto: document.getElementById("btn-auto"),
+  humanHint: document.getElementById("human-hint"),
+};
+
+// A human plays with the same four directions the policies choose from.
+const KEY_DIRECTIONS = {
+  ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+  w: "up", s: "down", a: "left", d: "right",
 };
 
 const STAT_KEYS = ["mode", "step", "score", "max_tile", "empty_cells", "latency_ms"];
@@ -423,6 +432,14 @@ dom.live.addEventListener("error", () => {
   dom.liveNote.textContent = "screenshot unavailable";
 });
 
+function applyManual(manual) {
+  // Only a real boolean moves the panel: a missing key must not claim a mode.
+  if (typeof manual !== "boolean") return;
+  dom.btnManual.classList.toggle("btn-active", manual);
+  dom.btnAuto.classList.toggle("btn-active", !manual);
+  dom.humanHint.hidden = !manual;
+}
+
 function renderControl(control) {
   if (!isObject(control) || control.available === false) {
     dom.controlStatus.textContent = MISSING;
@@ -433,8 +450,12 @@ function renderControl(control) {
   const pending = asInteger(control.pending_steps);
   const parts = [command, "speed " + (SPEED_LABELS[speed] || speed || MISSING)];
   if (pending !== null && pending > 0) parts.push("pending " + pending);
+  if (control.manual === true) parts.push("you play");
   dom.controlStatus.textContent = parts.join(" · ");
   if (speed && SPEED_LABELS[speed]) dom.speed.value = speed;
+  // The command level is written immediately, so the panel answers a click at once; the
+  // state poll then confirms what the runner actually did.
+  applyManual(control.manual);
 }
 
 async function postControl(payload) {
@@ -475,6 +496,7 @@ function renderState(state, available) {
   renderFailures(source);
   renderFeatures(source);
   renderScreenshot(source, available);
+  applyManual(available ? source.manual : undefined);
 }
 
 async function poll() {
@@ -499,7 +521,21 @@ document.getElementById("btn-start").addEventListener("click", () => postControl
 document.getElementById("btn-pause").addEventListener("click", () => postControl({ command: "pause" }));
 document.getElementById("btn-step").addEventListener("click", () => postControl({ command: "step" }));
 document.getElementById("btn-reset").addEventListener("click", () => postControl({ command: "reset" }));
+document.getElementById("btn-manual").addEventListener("click", () => postControl({ command: "manual" }));
+document.getElementById("btn-auto").addEventListener("click", () => postControl({ command: "auto" }));
 dom.speed.addEventListener("change", () => postControl({ speed: dom.speed.value }));
+
+document.addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+  const tag = event.target && event.target.tagName;
+  if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") return;
+  const direction = KEY_DIRECTIONS[event.key];
+  if (!direction) return;
+  event.preventDefault(); // an arrow key would otherwise scroll the panel
+  // The first keypress also switches the panel to manual, so a move is never swallowed
+  // because the policy happened to still be driving.
+  postControl({ direction });
+});
 
 fetchControl();
 poll();

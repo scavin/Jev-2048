@@ -1,8 +1,10 @@
 """One game of 2048, driven by one policy, recorded move by move.
 
-The loop has one rule it never breaks: the direction comes from `player.choose`. Everything
-else here is harness work — read the page, build the state the mode asks for, hand the move
-to the browser, measure what happened, tag the failures, write the line.
+The direction comes from `player.choose`. A hook may supply one instead, which is how the
+interactive demo lets a human take a move from the dashboard; the loop cannot tell the two
+apart, so a human move is recorded and measured exactly like a policy's. Everything else
+here is harness work — read the page, build the state the mode asks for, hand the move to
+the browser, measure what happened, tag the failures, write the line.
 """
 
 import asyncio
@@ -27,6 +29,10 @@ class Hook:
     """Runner callbacks. The default does nothing, so batch runs pay nothing."""
 
     async def before_step(self, live):
+        return None
+
+    async def choose(self, ctx):
+        """A direction from the caller instead of the policy. None means "no opinion"."""
         return None
 
     async def after_step(self, live):
@@ -179,7 +185,9 @@ class GameRunner:
             await self.hook.before_step(self.live)
 
             try:
-                decision = await self.player.choose(ctx)
+                decision = await self.hook.choose(ctx)
+                if decision is None:
+                    decision = await self.player.choose(ctx)
             except JevError as exc:
                 ended = "aborted"
                 abort_reason = str(exc)
@@ -244,7 +252,9 @@ class GameRunner:
             latencies.append(decision.latency_ms)
             wall.append(page_info["wall_ms"])
             usage = decision.usage or {}
-            jev_calls += 1 if self.player.uses_jev else 0
+            # A human move in a jev mode costs no request, so it is not counted as one.
+            if self.player.uses_jev and decision.source != "human":
+                jev_calls += 1
             jev_rejections += max(0, decision.attempts - 1)
             tokens_in += int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0)
             tokens_out += int(usage.get("completion_tokens") or usage.get("output_tokens") or 0)

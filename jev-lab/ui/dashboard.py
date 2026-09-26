@@ -37,13 +37,21 @@ SPEEDS = ("1", "5", "20", "max")
 DEFAULT_SPEED = "5"
 # `command` is a level the runner holds, not a one-shot. A "step" means "stay paused, but
 # spend one of the pending steps", so it lands on disk as `pause` plus a bigger budget.
+# `manual` and `auto` move the direction source between the human and the policy. Manual is
+# not paused: the runner blocks inside its hook waiting for the human's next move.
 COMMANDS = {
-    "run": ("run", 0),
-    "start": ("run", 0),
-    "reset": ("reset", 0),
-    "pause": ("pause", None),
-    "step": ("pause", 1),
+    "run": ("run", 0, None),
+    "start": ("run", 0, None),
+    "reset": ("reset", 0, None),
+    "pause": ("pause", None, None),
+    "step": ("pause", 1, None),
+    "manual": ("run", 0, True),
+    "auto": ("run", 0, False),
 }
+DIRECTIONS = ("up", "down", "left", "right")
+# A backstop only: the queue is pruned against the runner's own consumed counter, so in
+# normal use it holds just the moves the human has pressed and the runner has not played yet.
+MAX_QUEUED_MOVES = 64
 STATIC_FILES = {
     "/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8"),
     "/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
@@ -147,19 +155,46 @@ class _Handler(BaseHTTPRequestHandler):
         if speed not in SPEEDS:
             speed = DEFAULT_SPEED
         pending = max(0, _as_int(current.get("pending_steps"), 0))
+        manual = current.get("manual") is True
+        # Drop the moves the runner has already played, so the queue stays small and a
+        # direction is never applied twice.
+        state = _read_json(self.server.state_path)
+        played = _as_int(state.get("moves_done"), 0) if isinstance(state, dict) else 0
+        moves = [move for move in (current.get("moves") or [])
+                 if isinstance(move, dict) and move.get("direction") in DIRECTIONS
+                 and _as_int(move.get("seq"), 0) > played]
+        # The counter must only ever grow. Deriving it from the surviving queue would restart
+        # it at 1 once the runner had played everything, and the runner ignores a move whose
+        # sequence is not newer than the last one it executed, so those presses would vanish.
+        move_seq = max(_as_int(current.get("move_seq"), 0),
+                       max([_as_int(move.get("seq"), 0) for move in moves] or [0]))
 
         requested = body.get("command")
         if requested is not None:
             if not isinstance(requested, str) or requested not in COMMANDS:
                 self._send_plain(400, f"command must be one of {sorted(COMMANDS)}")
                 return
-            command, grant = COMMANDS[requested]
+            command, grant, wanted_manual = COMMANDS[requested]
+            if wanted_manual is not None:
+                manual = wanted_manual
             if grant is None:
                 pass  # pause keeps whatever budget the runner has not spent yet
             elif grant == 1:
                 pending += 1
             else:
                 pending = 0  # run / reset start a fresh budget
+
+        requested_direction = body.get("direction")
+        if requested_direction is not None:
+            if requested_direction not in DIRECTIONS:
+                self._send_plain(400, f"direction must be one of {list(DIRECTIONS)}")
+                return
+            # A keypress is itself a request to take over. A move that silently did nothing
+            # because the policy was still driving would read as a broken panel.
+            manual = True
+            command, pending = "run", 0
+            move_seq += 1
+            moves = (moves + [{"seq": move_seq, "direction": requested_direction}])[-MAX_QUEUED_MOVES:]
 
         requested_speed = body.get("speed")
         if requested_speed is not None:
@@ -174,6 +209,9 @@ class _Handler(BaseHTTPRequestHandler):
             "command": command,
             "speed": speed,
             "pending_steps": pending,
+            "manual": manual,
+            "moves": moves,
+            "move_seq": move_seq,
             "updated_at": time.time(),
         }
         _write_json_atomic(self.server.control_path, payload)

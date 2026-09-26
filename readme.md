@@ -27,8 +27,11 @@ The default dashboard is at [http://127.0.0.1:8799/](http://127.0.0.1:8799/).
 
 ### Everyday controls
 
-- **Pause, resume, step and change speed** in the dashboard. Step lets Jev make one move;
-  choosing directions manually is not supported.
+- **Pause, resume, step and change speed** in the dashboard. Step lets Jev make one move.
+- **Play yourself**: click *Play myself*, or just press an arrow key, and the panel waits for
+  you. Arrow keys or W A S D play one move each, recorded like any other move, and Jev stops
+  calling the model until you click *Jev plays*. Only the dashboard has controls; `--retro`
+  shows the game window and nothing else.
 - **Stop** with `Ctrl-C` in the terminal. In retro mode, closing the game window also stops it.
   Closing the dashboard tab does not stop the background game.
 - **Launch again** with the same command. The environment is reused, and a saved key needs no re-entry.
@@ -703,6 +706,12 @@ with a live, screenshot-free dashboard; Pause and Step worked. `--retro` played 
 Chromium with no dashboard listener, even with a saved dashboard pause command. Both modes
 exited 0 on Ctrl-C and stopped their owned servers. The stale-pause regression is covered by
 `game-test/test_demo_controls.py`.
+
+Human takeover was verified against a real game: switching the panel to manual froze the model
+for six seconds with the status `waiting for you`, then three separate direction presses, each
+after the previous one had been played, produced exactly three moves recorded with
+`decision_source: human` and no repeats; switching back resumed the model. A panel keypress
+drove the same path, and the mode buttons and the key hint followed the state.
 
 ### Installation and configuration details
 

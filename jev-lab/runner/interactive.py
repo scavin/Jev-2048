@@ -20,6 +20,7 @@ import labpaths  # noqa: F401
 
 from game.adapter import GameAdapter
 from players import build
+from players.base import Decision
 from runner.browser import BrowserSession
 from runner.game_loop import GameRunner, Hook, LogWriter
 
@@ -31,6 +32,7 @@ SHOT_PATH = os.path.join(labpaths.UI_DIR, "live.jpg")
 SPEEDS = {"1": 1.2, "5": 0.24, "20": 0.06, "max": 0.0}
 
 ARROWS = {"up": "↑", "down": "↓", "left": "←", "right": "→"}
+DIRECTIONS = tuple(ARROWS)
 
 
 class ResetRequested(Exception):
@@ -38,8 +40,8 @@ class ResetRequested(Exception):
 
 
 def new_control_state():
-    """Shared across games: last obeyed command, pause flag, and steps already released."""
-    return {"seq": -1, "paused": False, "consumed": 0}
+    """Shared across games: last obeyed command, pause flag, steps released, human moves."""
+    return {"seq": -1, "paused": False, "consumed": 0, "manual": False, "moves_done": 0}
 
 
 def write_json_atomic(path, payload):
@@ -98,10 +100,17 @@ class InteractiveHook(Hook):
         self.last_shot = 0.0
         self.screenshot_failures = 0
         self.outcome = None
+        # The live payload of the step in progress, so a wait for a human move can keep the
+        # panel fresh instead of leaving it frozen on the moment the wait began.
+        self._live = None
 
     @property
     def paused(self):
         return self.control["paused"]
+
+    @property
+    def manual(self):
+        return self.control["manual"]
 
     # ------------------------------------------------------------------ control
 
@@ -109,6 +118,10 @@ class InteractiveHook(Hook):
         control = read_json(self.control_path)
         if not control:
             return
+        # The direction source is a level, not a one-shot, so it is read even when no new
+        # command arrived.
+        if isinstance(control.get("manual"), bool):
+            self.control["manual"] = control["manual"]
         seq = int(control.get("seq", 0))
         if seq > self.control["seq"]:
             self.control["seq"] = seq
@@ -121,6 +134,54 @@ class InteractiveHook(Hook):
                 raise ResetRequested()
             if control.get("speed") in SPEEDS:
                 self.speed = control["speed"]
+
+    def _take_human_move(self):
+        """The oldest direction the human has not played yet, or None.
+
+        The panel appends to a queue with a monotonic `seq`. The highest one this runner has
+        executed is carried across games, so a queued move is played exactly once and a
+        restart never replays one.
+        """
+        control = read_json(self.control_path) or {}
+        queued = control.get("moves")
+        if not isinstance(queued, list):
+            return None
+        waiting = sorted((move for move in queued
+                          if isinstance(move, dict) and move.get("direction") in DIRECTIONS
+                          and int(move.get("seq", 0)) > self.control["moves_done"]),
+                         key=lambda move: int(move.get("seq", 0)))
+        if not waiting:
+            return None
+        self.control["moves_done"] = int(waiting[0]["seq"])
+        return waiting[0]["direction"]
+
+    async def choose(self, ctx):
+        """Take the next move from the human while the panel is in manual mode.
+
+        None hands the decision back to the policy, which is what every other run gets. While
+        waiting, the panel keeps being refreshed so it shows a live "waiting for you" state.
+        """
+        if not self.panel:
+            return None
+        self._apply_control()
+        if not self.manual:
+            return None
+        live = self._live if self._live is not None else {}
+        live.update(manual=True, status="waiting for you", chosen=None, probabilities=None,
+                    latency_ms=0.0)
+        await self.publish(live)
+        ticks = 0
+        while True:
+            direction = self._take_human_move()
+            if direction is not None:
+                return Decision(name=direction, source="human")
+            self._apply_control()
+            if not self.manual:
+                return None
+            await asyncio.sleep(0.1)
+            ticks += 1
+            if ticks % 5 == 0:
+                await self.publish(live)
 
     async def _gate(self, live):
         """Block while paused, releasing exactly one step per pending step budget.
@@ -154,6 +215,7 @@ class InteractiveHook(Hook):
     # ------------------------------------------------------------------ hooks
 
     async def before_step(self, live):
+        self._live = live
         await self._gate(live)
         live.update(paused=self.paused, speed=self.speed, step_mode=self.paused,
                     status="paused" if self.paused else "deciding")
@@ -187,7 +249,8 @@ class InteractiveHook(Hook):
             return
         payload = dict(live)
         payload.update(paused=self.paused, speed=self.speed, step_mode=self.paused,
-                       shots=self.shots, updated_at=time.time())
+                       shots=self.shots, manual=self.manual,
+                       moves_done=self.control["moves_done"], updated_at=time.time())
         write_json_atomic(self.state_path, payload)
         await self._maybe_screenshot()
 
