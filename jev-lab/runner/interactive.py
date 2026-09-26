@@ -64,6 +64,27 @@ def read_json(path, default=None):
         return default
 
 
+def reset_control_file(path, speed="5"):
+    """Start a session from a known state.
+
+    The control file drives a *running* demo, so what it holds is session state: which mode the
+    human left it in, and any move they had queued but not played. Resurrecting those would put
+    a new session straight into manual mode and play a keypress that belonged to the game that
+    just ended. The speed is the one thing worth carrying over, and it is set to the speed this
+    session actually starts with so the flag and the file cannot disagree.
+    """
+    write_json_atomic(path, {
+        "seq": 0,
+        "command": "run",
+        "speed": speed if speed in SPEEDS else "5",
+        "pending_steps": 0,
+        "manual": False,
+        "moves": [],
+        "move_seq": 0,
+        "updated_at": time.time(),
+    })
+
+
 def format_decision(live):
     probabilities = live.get("probabilities")
     if not probabilities:
@@ -333,6 +354,7 @@ async def run_interactive(mode, seed=2048, games=1, max_steps=5000, log_path=Non
         board = Dashboard(port=dashboard_port, state_path=STATE_PATH,
                           control_path=CONTROL_PATH, screenshot_path=SHOT_PATH)
         url = board.start()
+        reset_control_file(CONTROL_PATH, speed)
         if open_dashboard:
             # The panel opens in the human's own browser, not as another tab of the window
             # driving the game: stealing focus there would hide the game and background the

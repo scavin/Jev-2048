@@ -17,7 +17,7 @@ Nothing here asks a model anything.
 | `game_client.py` | Black-box page client: reads the board, presses keys, clicks buttons, seeds a board through the page's own storage |
 | `run_tests.py` | The suite: differential move checks, restart, persistence, game over, win / keep playing |
 | `mutants.py` | Five real defects injected into private copies of the game; the suite must fail on every one |
-| `test_demo_controls.py` | Regressions: a saved dashboard command cannot stall a retro demo, a human move is played once and in order, and the panel's move sequence never restarts |
+| `test_demo_controls.py` | Regressions: a saved dashboard command cannot stall a retro demo, a human move is played once and in order, the panel's move sequence never restarts, and a new session forgets the last one's mode |
 
 ## How the suite decides things
 

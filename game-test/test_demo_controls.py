@@ -12,7 +12,7 @@ import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "jev-lab"))
 
-from runner.interactive import InteractiveHook
+from runner.interactive import InteractiveHook, reset_control_file
 from ui.dashboard import Dashboard
 
 
@@ -69,6 +69,34 @@ class MoveSequenceTest(unittest.TestCase):
                 self.assertFalse(control.exists(), "a rejected request wrote the control file")
             finally:
                 board.stop()
+
+
+class SessionStartTest(unittest.IsolatedAsyncioTestCase):
+    """A new run must not inherit the mode or the unplayed moves of the last one."""
+
+    async def test_reset_forgets_the_mode_and_the_queued_move(self):
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory) / "control.json"
+            write(control, {"seq": 34, "command": "run", "speed": "20", "manual": True,
+                            "moves": [{"seq": 33, "direction": "up"}], "move_seq": 33})
+            reset_control_file(str(control))
+            after = json.loads(control.read_text())
+            self.assertFalse(after["manual"])
+            self.assertEqual(after["moves"], [])
+            hook = InteractiveHook(None, "random", 2048, panel=True, echo=False,
+                                   control_path=str(control),
+                                   state_path=str(Path(directory) / "state.json"))
+            self.assertIsNone(await asyncio.wait_for(hook.choose(None), timeout=1))
+
+    async def test_reset_records_the_speed_this_session_starts_with(self):
+        # The file must agree with the flag, so the stale value is replaced rather than kept.
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory) / "control.json"
+            write(control, {"seq": 34, "command": "run", "speed": "20"})
+            reset_control_file(str(control), "1")
+            self.assertEqual(json.loads(control.read_text())["speed"], "1")
+            reset_control_file(str(control), "nonsense")
+            self.assertEqual(json.loads(control.read_text())["speed"], "5")
 
 
 class DashboardIsolationTest(unittest.IsolatedAsyncioTestCase):
