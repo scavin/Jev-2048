@@ -9,13 +9,184 @@
 const MISSING = "--";
 const DIRECTIONS = ["up", "down", "left", "right"];
 const ARROWS = { up: "↑", down: "↓", left: "←", right: "→" };
-const SPEED_LABELS = { "1": "1x", "5": "5x", "20": "20x", max: "Max" };
+const SPEEDS = ["1", "5", "20", "max"];
 const FEATURE_KEYS = ["valid", "empty", "merge", "corner", "mono", "smooth"];
 // A human waiting on the keyboard gets a fast board. A model that answers in ~350 ms does
 // not, so the idle rate stays cheap instead of polling flat out forever.
 const POLL_IDLE_MS = 250;
 const POLL_MANUAL_MS = 60;
 const CONTROL_POLL_TICKS = 20; // refresh the control file every ~2s as well
+
+/* -- language ---------------------------------------------------------------
+ *
+ * The panel is a local page, so it follows the browser's own language list, the way any other
+ * page would. English is the fallback for a browser that asks for neither. Keys are flat;
+ * `t()` takes required strings and `tOr()` takes vocabulary that comes from the runner, where
+ * an unknown value (a new check, a new status) must show through unchanged rather than vanish.
+ */
+const STRINGS = {
+  en: {
+    title: "jev-lab dashboard",
+    connLost: "connection lost",
+    waitingRunner: "waiting for a runner",
+    liveAlt: "screenshot of the live 2048 window",
+    boardAria: "board",
+    noBoard: "no board yet",
+    cardDecision: "Jev Decision",
+    cardMoves: "Recent Moves",
+    cardFailures: "Failure Detection",
+    cardFeatures: "Move Features",
+    chosenLabel: "Chosen: ",
+    noProbabilities: "this policy does not return probabilities",
+    badProbabilities: "probabilities are not in the expected shape",
+    noMoves: "no moves yet",
+    noChecks: "no checks reported",
+    tagsPrefix: "tags: ",
+    mirrorOff: "live board below · screenshot mirror off",
+    noShotYet: "no screenshot yet",
+    shotUnavailable: "screenshot unavailable",
+    shotPrefix: "live.jpg · ",
+    yes: "Yes",
+    no: "No",
+    featureYes: "yes",
+    featureNo: "no",
+    "stat.mode": "Mode",
+    "stat.step": "Step",
+    "stat.score": "Score",
+    "stat.max_tile": "Max Tile",
+    "stat.empty_cells": "Empty Cells",
+    "stat.latency_ms": "Latency",
+    speedLabel: "speed",
+    optMax: "Max",
+    btnManual: "Play myself",
+    btnAuto: "Jev plays",
+    btnStart: "Start",
+    btnPause: "Pause",
+    btnStep: "Step",
+    btnReset: "Reset",
+    hint: "arrow keys or W A S D",
+    controlSpeed: "speed ",
+    controlPending: "pending ",
+    controlYouPlay: "you play",
+  },
+  zh: {
+    title: "jev-lab 控制面板",
+    connLost: "连接已断开",
+    waitingRunner: "等待 runner 启动",
+    liveAlt: "实时 2048 窗口截图",
+    boardAria: "棋盘",
+    noBoard: "还没有棋盘",
+    cardDecision: "Jev 决策",
+    cardMoves: "最近走子",
+    cardFailures: "失败检测",
+    cardFeatures: "走子特征",
+    chosenLabel: "选择：",
+    noProbabilities: "该策略不返回概率",
+    badProbabilities: "概率数据格式异常",
+    noMoves: "还没有走子",
+    noChecks: "暂无检测结果",
+    tagsPrefix: "标签：",
+    mirrorOff: "下方为实时棋盘 · 未开启截图镜像",
+    noShotYet: "暂无截图",
+    shotUnavailable: "截图不可用",
+    shotPrefix: "实时截图 · ",
+    yes: "是",
+    no: "否",
+    featureYes: "是",
+    featureNo: "否",
+    "stat.mode": "模式",
+    "stat.step": "步数",
+    "stat.score": "分数",
+    "stat.max_tile": "最大方块",
+    "stat.empty_cells": "空格",
+    "stat.latency_ms": "延迟",
+    speedLabel: "速度",
+    optMax: "最快",
+    btnManual: "我来玩",
+    btnAuto: "Jev 来玩",
+    btnStart: "开始",
+    btnPause: "暂停",
+    btnStep: "单步",
+    btnReset: "重置",
+    hint: "方向键或 W A S D",
+    controlSpeed: "速度 ",
+    controlPending: "待执行 ",
+    controlYouPlay: "你来操作",
+    "dir.up": "上",
+    "dir.down": "下",
+    "dir.left": "左",
+    "dir.right": "右",
+    "status.starting": "启动中",
+    "status.deciding": "决策中",
+    "status.moving": "走子中",
+    "status.paused": "已暂停",
+    "status.waiting for you": "等待你操作",
+    "status.game_over": "游戏结束",
+    "status.max_steps": "已达步数上限",
+    "status.aborted": "已中止",
+    "status.unknown": "未知",
+    "check.Loop": "循环",
+    "check.Repeated State": "重复局面",
+    "check.Invalid Repeat": "无效重复",
+    "check.Corner Break": "最大块离角",
+    "check.Space Collapse": "空间崩塌",
+    "check.Greedy Trap": "贪心陷阱",
+    "check.Stagnation": "停滞",
+    "check.Harness Desync": "状态失步",
+    "feature.valid": "合法",
+    "feature.empty": "空格",
+    "feature.merge": "合并",
+    "feature.corner": "在角",
+    "feature.mono": "单调",
+    "feature.smooth": "平滑",
+    "cmd.run": "运行",
+    "cmd.pause": "暂停",
+    "cmd.reset": "重置",
+  },
+};
+
+const LANGUAGE = (() => {
+  const wanted = (navigator.languages && navigator.languages.length)
+    ? navigator.languages : [navigator.language];
+  for (const tag of wanted) {
+    const base = String(tag || "").toLowerCase().split("-")[0];
+    if (STRINGS[base]) return base;
+  }
+  return "en";
+})();
+const T = STRINGS[LANGUAGE];
+// Number and clock formatting follow the chosen language rather than a browser tag that may be
+// one we cannot serve.
+const LOCALE = LANGUAGE === "zh" ? "zh-CN" : "en-US";
+
+function t(key) {
+  const value = T[key];
+  return typeof value === "string" ? value : STRINGS.en[key];
+}
+
+function tOr(key, fallback) {
+  const value = T[key];
+  return typeof value === "string" ? value : fallback;
+}
+
+function speedLabel(speed) {
+  if (speed === "max") return t("optMax");
+  return speed ? speed + "x" : MISSING;
+}
+
+function applyStatic() {
+  document.documentElement.lang = LANGUAGE === "zh" ? "zh-Hans" : "en";
+  document.title = t("title");
+  for (const node of document.querySelectorAll("[data-i18n]")) {
+    node.textContent = t(node.dataset.i18n);
+  }
+  for (const node of document.querySelectorAll("[data-i18n-alt]")) {
+    node.alt = t(node.dataset.i18nAlt);
+  }
+  for (const node of document.querySelectorAll("[data-i18n-aria]")) {
+    node.setAttribute("aria-label", t(node.dataset.i18nAria));
+  }
+}
 
 const dom = {
   banner: document.getElementById("banner"),
@@ -44,10 +215,6 @@ const KEY_DIRECTIONS = {
 };
 
 const STAT_KEYS = ["mode", "step", "score", "max_tile", "empty_cells", "latency_ms"];
-const STAT_LABELS = {
-  mode: "Mode", step: "Step", score: "Score",
-  max_tile: "Max Tile", empty_cells: "Empty Cells", latency_ms: "Latency",
-};
 
 // Cached DOM so a 4Hz poll updates text instead of rebuilding the panel.
 let statCells = null;
@@ -95,7 +262,7 @@ function fixed(value, digits, suffix) {
 
 function grouped(value) {
   const number = asInteger(value);
-  return number === null ? MISSING : number.toLocaleString("en-US");
+  return number === null ? MISSING : number.toLocaleString(LOCALE);
 }
 
 function put(node, text, missing) {
@@ -104,7 +271,8 @@ function put(node, text, missing) {
 }
 
 function directionLabel(direction) {
-  return direction + (ARROWS[direction] ? " " + ARROWS[direction] : "");
+  const name = tOr("dir." + direction, direction);
+  return name + (ARROWS[direction] ? " " + ARROWS[direction] : "");
 }
 
 /* -- board ------------------------------------------------------------------ */
@@ -122,7 +290,7 @@ function buildBoard() {
 function renderBoard(board) {
   if (!Array.isArray(board)) {
     boardCells = null;
-    dom.board.replaceChildren(el("div", "board-missing", "no board yet"));
+    dom.board.replaceChildren(el("div", "board-missing", t("noBoard")));
     return;
   }
   if (!boardCells) buildBoard();
@@ -173,7 +341,7 @@ function buildStats() {
   statCells = {};
   for (const key of STAT_KEYS) {
     const cell = el("div", "stat");
-    cell.appendChild(el("div", "label", STAT_LABELS[key]));
+    cell.appendChild(el("div", "label", t("stat." + key)));
     const value = el("div", "value");
     cell.appendChild(value);
     statCells[key] = value;
@@ -196,7 +364,7 @@ function ensureDecisionShell() {
   const rows = el("div", "rows");
   dom.decision.replaceChildren(rows);
   const chosen = document.getElementById("chosen");
-  chosen.replaceChildren("Chosen: ", el("b", null, MISSING));
+  chosen.replaceChildren(t("chosenLabel"), el("b", null, MISSING));
   decisionShell = { chosen: chosen.lastChild, rows };
   probRows = null;
 }
@@ -206,7 +374,7 @@ function buildProbRows() {
   probRows = {};
   for (const direction of DIRECTIONS) {
     const row = el("div", "prob-row");
-    const label = el("div", "dir", direction);
+    const label = el("div", "dir", directionLabel(direction));
     const bar = el("div", "bar");
     const fill = el("span");
     bar.appendChild(fill);
@@ -226,13 +394,13 @@ function renderDecision(state) {
   if (probabilities === null || probabilities === undefined) {
     probRows = null;
     decisionShell.rows.replaceChildren(
-      el("div", "missing-note", "this policy does not return probabilities"));
+      el("div", "missing-note", t("noProbabilities")));
     return;
   }
   if (!isObject(probabilities)) {
     probRows = null;
     decisionShell.rows.replaceChildren(
-      el("div", "missing-note", "probabilities are not in the expected shape"));
+      el("div", "missing-note", t("badProbabilities")));
     return;
   }
   if (!probRows) buildProbRows();
@@ -253,7 +421,7 @@ function renderMoves(state) {
   const moves = Array.isArray(state.recent_moves) ? state.recent_moves : null;
   dom.moves.replaceChildren();
   if (!moves || moves.length === 0) {
-    dom.moves.appendChild(el("div", "missing-note", "no moves yet"));
+    dom.moves.appendChild(el("div", "missing-note", t("noMoves")));
     return;
   }
   const names = moves.map((move) => (typeof move === "string" ? move : String(move)));
@@ -271,12 +439,12 @@ function renderFailures(state) {
     failureSignature = signature;
     dom.failures.replaceChildren();
     if (names.length === 0) {
-      dom.failures.appendChild(el("div", "missing-note", "no checks reported"));
+      dom.failures.appendChild(el("div", "missing-note", t("noChecks")));
     } else {
       for (const name of names) {
         const row = el("div", "check-row");
         row.dataset.check = name;
-        row.appendChild(el("div", "name", name));
+        row.appendChild(el("div", "name", tOr("check." + name, name)));
         row.appendChild(el("div", "flag", MISSING));
         dom.failures.appendChild(row);
       }
@@ -291,7 +459,7 @@ function renderFailures(state) {
       row.classList.remove("flagged");
       continue;
     }
-    flag.textContent = value ? "Yes" : "No";
+    flag.textContent = value ? t("yes") : t("no");
     flag.className = "flag " + (value ? "yes" : "no");
     row.classList.toggle("flagged", value);
   }
@@ -300,31 +468,37 @@ function renderFailures(state) {
   if (tags.length === 0) {
     if (existing) existing.remove();
   } else if (existing) {
-    existing.textContent = "tags: " + tags.join(", ");
+    existing.textContent = t("tagsPrefix") + tags.join(", ");
   } else {
-    dom.failures.appendChild(el("div", "tags", "tags: " + tags.join(", ")));
+    dom.failures.appendChild(el("div", "tags", t("tagsPrefix") + tags.join(", ")));
   }
 }
 
 /* -- features --------------------------------------------------------------- */
 
 function featureCell(key, block) {
+  // The second element is the CSS tone, kept separate from the text so a translated "yes"
+  // still colours the cell.
   switch (key) {
     case "valid":
-      return typeof block.valid === "boolean" ? (block.valid ? "yes" : "no") : MISSING;
+      return typeof block.valid === "boolean"
+        ? [block.valid ? t("featureYes") : t("featureNo"), block.valid ? "yes" : "no"]
+        : [MISSING, ""];
     case "empty":
-      return grouped(block.empty_cells_after);
+      return [grouped(block.empty_cells_after), ""];
     case "merge":
-      return grouped(block.merge_count);
+      return [grouped(block.merge_count), ""];
     case "corner":
       return typeof block.max_tile_in_corner === "boolean"
-        ? (block.max_tile_in_corner ? "yes" : "no") : MISSING;
+        ? [block.max_tile_in_corner ? t("featureYes") : t("featureNo"),
+           block.max_tile_in_corner ? "yes" : "no"]
+        : [MISSING, ""];
     case "mono":
-      return fixed(block.monotonicity, 2);
+      return [fixed(block.monotonicity, 2), ""];
     case "smooth":
-      return fixed(block.smoothness, 2);
+      return [fixed(block.smoothness, 2), ""];
     default:
-      return MISSING;
+      return [MISSING, ""];
   }
 }
 
@@ -352,7 +526,7 @@ function renderFeatures(state) {
       for (const key of FEATURE_KEYS) {
         const row = el("div", "kv");
         row.dataset.key = key;
-        row.appendChild(el("span", "k", key));
+        row.appendChild(el("span", "k", tOr("feature." + key, key)));
         row.appendChild(el("span", "v", MISSING));
         block.appendChild(row);
       }
@@ -364,10 +538,10 @@ function renderFeatures(state) {
     const source = features[block.dataset.direction];
     for (const row of block.querySelectorAll(".kv")) {
       const key = row.dataset.key;
-      const text = featureCell(key, source);
+      const [text, tone] = featureCell(key, source);
       const node = row.querySelector(".v");
       node.textContent = text;
-      node.className = "v" + (text === "yes" ? " yes" : text === "no" ? " no" : "");
+      node.className = "v" + (tone ? " " + tone : "");
     }
   }
 }
@@ -376,12 +550,13 @@ function renderFeatures(state) {
 
 function renderHeader(state, available) {
   const status = asString(state.status);
-  dom.statusChip.textContent = status || MISSING;
+  dom.statusChip.textContent = status ? tOr("status." + status, status) : MISSING;
+  // The attribute stays the runner's own word: the stylesheet keys off it.
   dom.statusChip.dataset.status = status || "unknown";
 
   if (!available) {
     const error = asString(state.error);
-    dom.banner.textContent = error || "waiting for a runner";
+    dom.banner.textContent = error || t("waitingRunner");
     dom.banner.className = "banner";
     dom.banner.hidden = false;
     return;
@@ -398,7 +573,7 @@ function renderScreenshot(state, available) {
     lastImageToken = null;
     pendingImageToken = null;
     dom.live.hidden = true;
-    dom.liveNote.textContent = "live board below · screenshot mirror off";
+    dom.liveNote.textContent = t("mirrorOff");
     return;
   }
   const token = available ? String(state.updated_at ?? state.step ?? "state") : null;
@@ -406,7 +581,7 @@ function renderScreenshot(state, available) {
     lastImageToken = null;
     pendingImageToken = null;
     dom.live.hidden = true;
-    dom.liveNote.textContent = "no screenshot yet";
+    dom.liveNote.textContent = t("noShotYet");
     return;
   }
   if (token === lastImageToken || token === pendingImageToken) return;
@@ -424,7 +599,7 @@ function renderScreenshot(state, available) {
     dom.live.src = loader.src;
     dom.live.hidden = false;
     dom.liveNote.textContent =
-      "live.jpg · " + new Date().toLocaleTimeString("en-US", { hour12: false });
+      t("shotPrefix") + new Date().toLocaleTimeString(LOCALE, { hour12: false });
   };
   loader.onerror = () => {
     if (pendingImageToken === token) pendingImageToken = null;
@@ -433,7 +608,7 @@ function renderScreenshot(state, available) {
 }
 
 dom.live.addEventListener("error", () => {
-  dom.liveNote.textContent = "screenshot unavailable";
+  dom.liveNote.textContent = t("shotUnavailable");
 });
 
 function applyManual(manual) {
@@ -453,11 +628,11 @@ function renderControl(control) {
   const command = asString(control.command) || MISSING;
   const speed = asString(control.speed);
   const pending = asInteger(control.pending_steps);
-  const parts = [command, "speed " + (SPEED_LABELS[speed] || speed || MISSING)];
-  if (pending !== null && pending > 0) parts.push("pending " + pending);
-  if (control.manual === true) parts.push("you play");
+  const parts = [tOr("cmd." + command, command), t("controlSpeed") + speedLabel(speed)];
+  if (pending !== null && pending > 0) parts.push(t("controlPending") + pending);
+  if (control.manual === true) parts.push(t("controlYouPlay"));
   dom.controlStatus.textContent = parts.join(" · ");
-  if (speed && SPEED_LABELS[speed]) dom.speed.value = speed;
+  if (speed && SPEEDS.indexOf(speed) >= 0) dom.speed.value = speed;
   // The command level is written immediately, so the panel answers a click at once; the
   // state poll then confirms what the runner actually did.
   applyManual(control.manual);
@@ -542,6 +717,7 @@ document.addEventListener("keydown", (event) => {
   postControl({ direction });
 });
 
+applyStatic();
 fetchControl();
 (function schedule() {
   setTimeout(async () => {

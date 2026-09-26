@@ -32,9 +32,14 @@ The default dashboard is at [http://127.0.0.1:8799/](http://127.0.0.1:8799/).
   you. Arrow keys or W A S D play one move each, recorded like any other move, and Jev stops
   calling the model until you click *Jev plays*. Only the dashboard has controls; `--retro`
   shows the game window and nothing else.
+- **Language**: the panel follows your browser's language list. It is available in English and
+  Chinese, and anything else falls back to English. The game window is the upstream game and
+  keeps its own wording.
 - **Stop** with `Ctrl-C` in the terminal. In retro mode, closing the game window also stops it.
   Closing the dashboard tab does not stop the background game.
 - **Launch again** with the same command. The environment is reused, and a saved key needs no re-entry.
+  Each run starts in auto mode: the previous session's mode and any move you had not played are
+  not carried over.
 
 Tested on macOS; Windows/Linux have not been runtime-tested.
 See [Requirements](#12-requirements) for installation and credential details.
@@ -712,6 +717,10 @@ for six seconds with the status `waiting for you`, then three separate direction
 after the previous one had been played, produced exactly three moves recorded with
 `decision_source: human` and no repeats; switching back resumed the model. A panel keypress
 drove the same path, and the mode buttons and the key hint followed the state.
+
+The panel's language was verified by loading it with a browser reporting `zh-CN`, `zh-TW`,
+`en-US` and `fr-FR`: Chinese for the first two, English for the other two, with the stats,
+check names, feature labels and status chip translated and the English panel unchanged.
 
 ### Installation and configuration details
 
