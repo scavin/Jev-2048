@@ -1,15 +1,14 @@
-"""Watch jev play 2048. Forever, in a real window, until you stop it.
+"""Watch Jev play 2048 in the dashboard, until you stop it.
 
-    python demo.py
+    python demo.py          # dashboard only; real game runs in background Chromium
+    python demo.py --retro  # original game window only; no dashboard
 
-No arguments needed. It checks that the 2048 page is being served (starting a static server
-itself if it is not), opens a visible Chromium window on the game, opens the live panel in
-your own browser, and then plays one game after another with a fresh seed each time. Every
-move is printed as it happens, the final board of each game is left on screen for a few
-seconds, and the next game starts on its own.
+The demo starts a static game server if needed and plays successive games with fresh seeds.
+By default it opens the live panel in your browser, drawing the board from game state
+without screenshots. --retro instead shows the original 2048 window.
 
-Stop it with Ctrl-C, or just close the game window. Either way the log is closed and the
-browser is shut down.
+Stop with Ctrl-C. In retro mode, closing the game window also stops the demo.
+Closing a dashboard tab does not stop the background game.
 
     python demo.py --mode jev-board              # the failure case: one direction, forever
     python demo.py --mode jev-features --speed 1 # one move every 1.2s
@@ -79,21 +78,19 @@ def parse_args(argv=None):
                         help="moves per game; 0 = let every game run to its own end")
     parser.add_argument("--between-games", type=float, default=3.0,
                         help="seconds to leave the finished board on screen")
-    parser.add_argument("--shots", dest="shots", action="store_true", default=None,
-                        help="mirror the window into the panel even when it is visible "
-                             "(capturing a visible window makes it flash)")
+    parser.add_argument("--shots", dest="shots", action="store_true", default=False,
+                        help="include screenshots in the dashboard (off by default)")
     parser.add_argument("--no-shots", dest="shots", action="store_false",
                         help="never screenshot; the panel draws the board from the data")
     parser.add_argument("--shot-interval", type=float, default=0.2,
-                        help="seconds between panel screenshots (default: only when headless)")
+                        help="seconds between screenshots when --shots is enabled")
     parser.add_argument("--dashboard-port", type=int, default=8799)
-    parser.add_argument("--no-dashboard", action="store_true", help="skip the live panel")
     parser.add_argument("--no-open", action="store_true",
                         help="do not open the panel in your browser; just print its URL")
     parser.add_argument("--cdp", default=None,
                         help="drive an already-running Chrome, e.g. http://127.0.0.1:9222")
-    parser.add_argument("--headless", action="store_true",
-                        help="hide the window (the panel still shows a screenshot)")
+    parser.add_argument("--retro", action="store_true",
+                        help="show only the original 2048 window instead of the dashboard")
     parser.add_argument("--log", default=None, help="JSONL path (default logs/demo.jsonl)")
     return parser.parse_args(argv)
 
@@ -125,17 +122,18 @@ def main(argv=None):
 
     log_path = args.log or os.path.join(labpaths.LOGS_DIR, "demo.jsonl")
     board = Scoreboard()
-    print("2048 / jev demo — %s. Ctrl-C or close the window to stop."
-          % " + ".join(modes), flush=True)
+    stop_hint = "Ctrl-C or close the game window" if args.retro else "Ctrl-C"
+    print("2048 / jev demo — %s. %s to stop."
+          % (" + ".join(modes), stop_hint), flush=True)
     print("log: %s" % log_path, flush=True)
     try:
         with ensure_game_server():
             asyncio.run(run_interactive(
                 modes, seed=args.seed, games=0, max_steps=args.max_steps,
-                log_path=log_path, cdp=args.cdp, headless=args.headless, speed=args.speed,
-                dashboard=not args.no_dashboard, dashboard_port=args.dashboard_port,
+                log_path=log_path, cdp=args.cdp, headless=not args.retro, speed=args.speed,
+                dashboard=not args.retro, dashboard_port=args.dashboard_port,
                 open_dashboard=not args.no_open, on_outcome=board.add,
-                between_games=args.between_games, shots=args.shots,
+                between_games=args.between_games, shots=args.shots and not args.retro,
                 shot_interval=args.shot_interval or 10_000))
     except KeyboardInterrupt:
         pass

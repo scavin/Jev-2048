@@ -6,7 +6,8 @@ The game itself is untouched: the suite drives the real page through real keyboa
 observes only the rendered DOM and the `localStorage` the page writes. No game internals are
 imported, so a bug in `GameManager` cannot hide behind the harness reading the same objects.
 
-Every verdict comes from `reference2048.py`. Nothing here asks a model anything.
+Game-rule verdicts come from `reference2048.py`; runner regressions use deterministic assertions.
+Nothing here asks a model anything.
 
 ## What each file does
 
@@ -16,6 +17,7 @@ Every verdict comes from `reference2048.py`. Nothing here asks a model anything.
 | `game_client.py` | Black-box page client: reads the board, presses keys, clicks buttons, seeds a board through the page's own storage |
 | `run_tests.py` | The suite: differential move checks, restart, persistence, game over, win / keep playing |
 | `mutants.py` | Five real defects injected into private copies of the game; the suite must fail on every one |
+| `test_demo_controls.py` | Regression: saved dashboard pause/step commands cannot stall a retro demo |
 
 ## How the suite decides things
 
@@ -49,6 +51,12 @@ python game-test/run_tests.py --url … --mutants        # require the suite to 
 ```
 
 The suite exits non-zero if any check fails, or if any mutant survives.
+
+Run the dashboard-control regression without a browser, server or API key:
+
+```bash
+python game-test/test_demo_controls.py
+```
 
 ## Notes on the game's observable contract
 

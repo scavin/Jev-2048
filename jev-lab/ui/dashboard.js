@@ -380,14 +380,12 @@ function renderHeader(state, available) {
 }
 
 function renderScreenshot(state, available) {
-  // The runner says whether it is mirroring the window at all. When it is not — which is the
-  // default while a human is watching the real window — there is nothing to fetch, and asking
-  // for it five times a second would only produce 404s.
+  // The default dashboard draws the board from game state, without screenshot requests.
   if (available && state.shots === false) {
     lastImageToken = null;
     pendingImageToken = null;
     dom.live.hidden = true;
-    dom.liveNote.textContent = "mirror off · watch the real window";
+    dom.liveNote.textContent = "live board below · screenshot mirror off";
     return;
   }
   const token = available ? String(state.updated_at ?? state.step ?? "state") : null;

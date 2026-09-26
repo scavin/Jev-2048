@@ -129,6 +129,8 @@ class InteractiveHook(Hook):
         decision sees a live `paused` state instead of the file frozen at the moment the
         pause began.
         """
+        if not self.panel:
+            return
         self._apply_control()
         if not self.paused:
             return

@@ -65,8 +65,8 @@ The launcher automatically:
    into `.jev/`. Git and local model weights are **not** required.
 4. Asks for your **TypeSafe API key**, with input hidden. You must obtain a real key
    from [TypeSafe](https://typesafe.ai); API usage may incur charges.
-5. Starts the game server, opens a **visible game window** and the live dashboard, and
-   lets `jev-features` play one game after another until you stop it.
+5. Starts the game server and opens **only the new dashboard**, where `jev-features` plays
+   successive games. The original game runs in background Chromium; there is no second window.
 
 The launcher asks before saving a key. If you answer `y`, it saves plaintext **outside the
 repository**, so the game's static server cannot serve it: `$XDG_CONFIG_HOME/jev-2048/credentials.env`
@@ -76,6 +76,21 @@ macOS/Linux permissions are owner-only; Windows follows your user profile's ACLs
 Do not share this file; delete it to forget the key. An exported `TYPESAFE_API_KEY` takes
 precedence, followed by the saved key and then `$JEV_REPO/.env`.
 Keys supplied through those existing sources are not copied.
+
+### Choose the interface
+
+```bash
+python3 start.py          # new dashboard only (default)
+python3 start.py --retro  # original 2048 window only, no dashboard
+```
+
+On Windows, use `py -3 start.py` or `py -3 start.py --retro`.
+The default dashboard at `http://127.0.0.1:8799/` shows the board, decisions and probabilities,
+with Pause, Step and speed controls. It renders live game state without screenshots.
+Both interfaces drive the same original game with the same Jev policy.
+For self-managed environments, `demo.py` follows the same default and accepts `--retro`.
+The old demo flags `--headless` and `--no-dashboard` are replaced by this interface choice;
+`run.py` and `benchmark.py` retain their own options.
 
 ### Subsequent launches
 
@@ -117,8 +132,9 @@ Example output (using a short step limit):
 
 ### Stop it
 
-Ctrl-C, or just close the game window — both close the log, shut down the browser and print the
-summary. A game interrupted halfway keeps the moves it actually made.
+Press **Ctrl-C in the terminal** to stop and print a summary. In `--retro` mode, closing
+the game window also stops the demo. Closing the dashboard tab **does not** stop the
+background game. An interrupted game keeps the moves it actually made in its log.
 
 ### Then try
 
@@ -140,22 +156,17 @@ in the background.
 
 Two things about what you see on screen:
 
-* **The window does not flash, and does not stutter.** Capturing a *visible* window forces
-  Chromium to re-raster its surface, which reads as the whole window blinking — and the panel
-  used to ask for a capture either side of every move, so the blink was synchronised with the
-  moves and cost about a tenth of a second each. When the window is visible there is nothing
-  to mirror, so **no screenshot is taken at all**: the panel draws the board from the data
-  instead, and the game runs noticeably faster for it. `--shots` forces the mirror on anyway
-  if you want to record the panel; `--no-shots` forbids it. Verified: a headed run makes zero
-  screenshot calls and never writes `ui/live.jpg`; a headless one still mirrors.
+* **No screenshots by default.** The new dashboard draws directly from game state, so it
+  does not need a screenshot mirror. `--shots` explicitly enables the mirror in dashboard
+  mode; `--no-shots` disables it. Retro mode has no dashboard and takes no screenshots,
+  preserving the fix for the per-move flashing observed with visible-window capture.
 * **No white flash between games either.** Every game is a fresh navigation, and Chromium
   paints its own default background — white — for the moment before a document has any style.
   The session overrides that default to the game's own `#faf8ef` through CDP, so a reload
   looks like the game rather than a white blink. Measured: a blank page renders
   `(250, 248, 239)` instead of `(255, 255, 255)`.
 
-With `--no-dashboard` there is no panel at all, and the game window is the only thing on
-screen.
+Use `--retro` when you want only the original game window instead of the dashboard.
 
 ---
 
@@ -231,9 +242,10 @@ simply keeps the flash.
 
 **No capture of a window someone is watching.** `page.screenshot()` on a visible window
 forces a surface re-raster, which flashes the whole window; asking for one either side of
-every move made the flash look like part of the game and cost ~100 ms per move. The runner
-therefore mirrors the window only when it is hidden (`--headless`), and the panel says so and
-draws the board from the data instead. `--shots` / `--no-shots` override that.
+every move made the flash look like part of the game and cost ~100 ms per move.
+The demo explicitly disables screenshots in both its default dashboard and retro mode.
+`--shots` opts into the dashboard mirror only. Other callers of the shared runner still
+default to mirroring headless sessions; visible sessions are not captured by default.
 
 **Serialized page loads.** The 2048 page is served by `python3 -m http.server`, which speaks
 HTTP/1.0: one connection per file, closed as soon as the response is written, with a listen
@@ -766,3 +778,9 @@ explicit saving outside the repository (mode 0600), and subsequent launches with
 install/download/key prompt. Short 8-step games restarted automatically; Ctrl-C exited
 cleanly and stopped the owned servers. Missing-key and invalid `JEV_REPO` errors were
 exercised. Windows/Linux instructions have not been runtime-tested.
+
+Interface verification on macOS: the default demo ran real Jev decisions in headless Chromium
+with a live, screenshot-free dashboard; Pause and Step worked. `--retro` played in headed
+Chromium with no dashboard listener, even with a saved dashboard pause command. Both modes
+exited 0 on Ctrl-C and stopped their owned servers. The stale-pause regression is covered by
+`game-test/test_demo_controls.py`.

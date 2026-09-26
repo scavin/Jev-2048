@@ -1,6 +1,7 @@
-"""Install missing project dependencies, then watch Jev play in a visible browser.
+"""Install missing project dependencies, then watch Jev play in the new dashboard.
 
-    python3 start.py                  # first launch and every subsequent launch
+    python3 start.py                  # new dashboard; game runs in the background
+    python3 start.py --retro          # original 2048 window only
     python3 start.py --setup-only     # install/check without asking for a key or playing
     python3 start.py --mode random    # no model or credentials required
 
@@ -202,13 +203,13 @@ def main():
         return 0
     if needs_jev:
         configure_key()
-    say("Starting demo. Ctrl-C or close the game window to stop.")
+    say("Starting demo. Ctrl-C to stop; --retro also stops when the game window closes.")
     from playwright.sync_api import Error
     try:
         return demo.main(demo_args)
     except Error as exc:
-        raise RuntimeError("Browser session failed. A visible desktop is required by default; "
-                           "use --headless only if you intend to hide the game.\n%s" % exc) from exc
+        raise RuntimeError("Browser session failed. Check the Chromium installation and, "
+                           "when using --retro, desktop availability.\n%s" % exc) from exc
 
 
 if __name__ == "__main__":
