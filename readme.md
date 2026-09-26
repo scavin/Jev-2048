@@ -16,7 +16,8 @@ Watch Jev play 2048 automatically, in the new dashboard or the original game win
 | New dashboard (default) | `python3 start.py` | `py -3 start.py` |
 | Original 2048 window | `python3 start.py --retro` | `py -3 start.py --retro` |
 
-The first launch installs dependencies and downloads Chromium and the Jev client.
+The first launch fills in whatever is missing: it reuses dependencies and a Chromium that
+are already on the machine, and only installs or downloads what is absent.
 Then enter your API key when prompted; the input is hidden. Answer `y` to save it for
 future launches as plaintext in your local configuration directory, outside the repository.
 Internet access is required, and API calls may incur charges.
@@ -690,6 +691,13 @@ install/download/key prompt. Short 8-step games restarted automatically; Ctrl-C 
 cleanly and stopped the owned servers. Missing-key and invalid `JEV_REPO` errors were
 exercised. Windows/Linux instructions have not been runtime-tested.
 
+Dependency reuse was verified separately, because an earlier version installed Chromium into
+a project-local directory and so downloaded a second copy of a browser the machine already
+had. With the machine's cache populated and no `PLAYWRIGHT_BROWSERS_PATH` override, the
+launcher now reports the existing packages and browser, downloads nothing, and plays a real
+game. The install branch was exercised by pointing `HOME` at an empty directory, which makes
+Playwright's default cache empty, so the download and launch check run for real.
+
 Interface verification on macOS: the default demo ran real Jev decisions in headless Chromium
 with a live, screenshot-free dashboard; Pause and Step worked. `--retro` played in headed
 Chromium with no dashboard listener, even with a saved dashboard pause command. Both modes
@@ -698,8 +706,14 @@ exited 0 on Ctrl-C and stopped their owned servers. The stale-pause regression i
 
 ### Installation and configuration details
 
-- The launcher installs dependencies in the project's `.venv/` and downloads Chromium and
-  a pinned Jev client into `.jev/`. No local model weights are needed; ZIP users do not need Git.
+- The launcher installs missing dependencies into the project's `.venv/`, and downloads only
+  a pinned Jev client into `.jev/`. Chromium goes to Playwright's own cache (macOS
+  `~/Library/Caches/ms-playwright`, Linux `~/.cache/ms-playwright`, Windows
+  `%USERPROFILE%\AppData\Local\ms-playwright`) and is reused when it is already there, so
+  another project's copy is never downloaded twice. No local model weights are needed, and
+  ZIP users do not need Git.
+- Dependencies are accepted at a minimum version rather than an exact one: a satisfying
+  install is reported and left untouched instead of being replaced.
 - To set up without playing: `python3 start.py --setup-only`, or `py -3 start.py --setup-only`
   on Windows. This does not request a key or call the model API.
 - System Python is not changed. No global pip installs or automatic `sudo` commands are run.

@@ -30,7 +30,14 @@ CONFIG_HOME = Path(os.environ.get("LOCALAPPDATA" if os.name == "nt" else "XDG_CO
 KEY_FILE = CONFIG_HOME / "jev-2048" / "credentials.env"
 JEV_REVISION = "1231850a0bf1a0c0341fe408ef1668dbbfdfac46"
 JEV_SOURCE = LOCAL / ("jev-ultrafast-" + JEV_REVISION)
-PACKAGES = {"playwright": "1.63.0", "httpx": "0.28.1", "h2": "4.4.1"}
+# name -> (minimum, exclusive maximum or None, pip requirement). The versions this repository
+# was verified against, as minimums: an install already inside the range is left untouched
+# rather than replaced, and the browser check below covers the matching browser revision.
+REQUIREMENTS = {
+    "playwright": ((1, 63, 0), (2,), "playwright>=1.63.0,<2"),
+    "httpx": ((0, 28, 1), (1,), "httpx[http2]>=0.28.1,<1"),
+    "h2": ((4, 4, 1), None, "h2>=4.4.1"),
+}
 
 
 def say(message):
@@ -68,41 +75,64 @@ def enter_environment():
     raise SystemExit(code)
 
 
+def _version_tuple(text):
+    """Enough of a version parser to compare what pip reports against these minimums."""
+    numbers = []
+    for chunk in str(text).replace("-", ".").split("."):
+        digits = ""
+        for character in chunk:
+            if character.isdigit():
+                digits += character
+            else:
+                break
+        numbers.append(int(digits) if digits else 0)
+    return tuple(numbers)
+
+
 def ensure_packages():
     missing = []
-    for name, version in PACKAGES.items():
+    present = []
+    for name, (minimum, maximum, requirement) in REQUIREMENTS.items():
         try:
-            installed = importlib.metadata.version(name)
+            reported = importlib.metadata.version(name)
+            installed = _version_tuple(reported)
         except importlib.metadata.PackageNotFoundError:
-            installed = None
-        if installed != version:
-            extra = "[http2]" if name == "httpx" else ""
-            missing.append("%s%s==%s" % (name, extra, version))
+            reported, installed = None, None
+        if installed is None or installed < minimum or (maximum and installed >= maximum):
+            missing.append(requirement)
+        else:
+            present.append("%s %s" % (name, reported))
+    if present:
+        say("Already installed, left alone: " + ", ".join(present))
     if missing:
-        say("Installing project dependencies (PyPI access required).")
+        say("Installing (PyPI access required): " + ", ".join(missing))
         run_command([sys.executable, "-m", "pip", "install", *missing])
-    else:
-        say("Python dependencies ready; no installation needed.")
 
 
 def ensure_browser():
     from playwright.sync_api import Error, sync_playwright
 
-    os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(LOCAL / "browsers"))
     with sync_playwright() as playwright:
-        installed = Path(playwright.chromium.executable_path).is_file()
-    if not installed:
-        say("Installing Chromium in %s" % os.environ["PLAYWRIGHT_BROWSERS_PATH"])
+        executable = Path(playwright.chromium.executable_path)
+    if executable.is_file():
+        # Playwright's cache is shared with every other project on the machine, so a browser
+        # that is already there is used as it is rather than downloaded a second time.
+        say("Chromium already installed: %s" % executable)
+    else:
+        location = os.environ.get("PLAYWRIGHT_BROWSERS_PATH") or "Playwright's default cache"
+        say("Chromium is missing; installing it into %s" % location)
         run_command([sys.executable, "-m", "playwright", "install", "chromium"])
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True, channel="chromium")
+            # No channel, and headless: the same launch the demo performs, headless shell included.
+            browser = playwright.chromium.launch(headless=True)
             browser.close()
     except Error as exc:
         raise RuntimeError(
-            "Chromium cannot start. On Linux, missing system libraries may require "
-            "an administrator to run: %s -m playwright install-deps chromium. "
-            "No sudo command was run automatically.\n%s" % (sys.executable, exc)) from exc
+            "Chromium is installed but cannot start. Repair it with: %s -m playwright install "
+            "chromium. On Linux, missing system libraries may require an administrator to run: "
+            "%s -m playwright install-deps chromium. No sudo command was run automatically.\n%s"
+            % (sys.executable, sys.executable, exc)) from exc
     say("Chromium launch check passed.")
 
 
