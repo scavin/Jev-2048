@@ -11,8 +11,11 @@ const DIRECTIONS = ["up", "down", "left", "right"];
 const ARROWS = { up: "↑", down: "↓", left: "←", right: "→" };
 const SPEED_LABELS = { "1": "1x", "5": "5x", "20": "20x", max: "Max" };
 const FEATURE_KEYS = ["valid", "empty", "merge", "corner", "mono", "smooth"];
-const POLL_MS = 250;
-const CONTROL_POLL_TICKS = 8; // refresh the control file every ~2s as well
+// A human waiting on the keyboard gets a fast board. A model that answers in ~350 ms does
+// not, so the idle rate stays cheap instead of polling flat out forever.
+const POLL_IDLE_MS = 250;
+const POLL_MANUAL_MS = 60;
+const CONTROL_POLL_TICKS = 20; // refresh the control file every ~2s as well
 
 const dom = {
   banner: document.getElementById("banner"),
@@ -57,6 +60,7 @@ let lastImageToken = null;
 let pendingImageToken = null;
 let pollTick = 0;
 let polling = false;
+let pollDelay = POLL_IDLE_MS;
 
 /* -- small helpers ---------------------------------------------------------- */
 
@@ -438,6 +442,7 @@ function applyManual(manual) {
   dom.btnManual.classList.toggle("btn-active", manual);
   dom.btnAuto.classList.toggle("btn-active", !manual);
   dom.humanHint.hidden = !manual;
+  pollDelay = manual ? POLL_MANUAL_MS : POLL_IDLE_MS;
 }
 
 function renderControl(control) {
@@ -538,5 +543,9 @@ document.addEventListener("keydown", (event) => {
 });
 
 fetchControl();
-poll();
-setInterval(poll, POLL_MS);
+(function schedule() {
+  setTimeout(async () => {
+    await poll();
+    schedule();
+  }, pollDelay);
+})();

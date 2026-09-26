@@ -31,6 +31,11 @@ SHOT_PATH = os.path.join(labpaths.UI_DIR, "live.jpg")
 # Seconds to wait between moves. "max" runs as fast as the page and the model allow.
 SPEEDS = {"1": 1.2, "5": 0.24, "20": 0.06, "max": 0.0}
 
+# A human waits on the keyboard, so the manual loop polls the control file far more often than
+# the pause gate does. The file is a few hundred bytes and this poll is the only thing standing
+# between a keypress and the browser pressing the key.
+HUMAN_POLL_SECONDS = 0.02
+
 ARROWS = {"up": "↑", "down": "↓", "left": "←", "right": "→"}
 DIRECTIONS = tuple(ARROWS)
 
@@ -103,6 +108,9 @@ class InteractiveHook(Hook):
         # The live payload of the step in progress, so a wait for a human move can keep the
         # panel fresh instead of leaving it frozen on the moment the wait began.
         self._live = None
+        # Whether the current move came from the keyboard. The speed setting paces the model;
+        # it must not sit between a keypress and the board.
+        self.human_move = False
 
     @property
     def paused(self):
@@ -114,8 +122,8 @@ class InteractiveHook(Hook):
 
     # ------------------------------------------------------------------ control
 
-    def _apply_control(self):
-        control = read_json(self.control_path)
+    def _absorb(self, control):
+        """Apply one already-read control document to this runner's state."""
         if not control:
             return
         # The direction source is a level, not a one-shot, so it is read even when no new
@@ -135,14 +143,16 @@ class InteractiveHook(Hook):
             if control.get("speed") in SPEEDS:
                 self.speed = control["speed"]
 
-    def _take_human_move(self):
+    def _apply_control(self):
+        self._absorb(read_json(self.control_path))
+
+    def _take_human_move(self, control):
         """The oldest direction the human has not played yet, or None.
 
         The panel appends to a queue with a monotonic `seq`. The highest one this runner has
         executed is carried across games, so a queued move is played exactly once and a
         restart never replays one.
         """
-        control = read_json(self.control_path) or {}
         queued = control.get("moves")
         if not isinstance(queued, list):
             return None
@@ -161,26 +171,30 @@ class InteractiveHook(Hook):
         None hands the decision back to the policy, which is what every other run gets. While
         waiting, the panel keeps being refreshed so it shows a live "waiting for you" state.
         """
+        self.human_move = False
         if not self.panel:
             return None
-        self._apply_control()
+        control = read_json(self.control_path) or {}
+        self._absorb(control)
         if not self.manual:
             return None
         live = self._live if self._live is not None else {}
         live.update(manual=True, status="waiting for you", chosen=None, probabilities=None,
                     latency_ms=0.0)
         await self.publish(live)
-        ticks = 0
+        heartbeat = time.time()
         while True:
-            direction = self._take_human_move()
+            control = read_json(self.control_path) or {}
+            self._absorb(control)
+            direction = self._take_human_move(control)
             if direction is not None:
+                self.human_move = True
                 return Decision(name=direction, source="human")
-            self._apply_control()
             if not self.manual:
                 return None
-            await asyncio.sleep(0.1)
-            ticks += 1
-            if ticks % 5 == 0:
+            await asyncio.sleep(HUMAN_POLL_SECONDS)
+            if time.time() - heartbeat >= 0.5:
+                heartbeat = time.time()
                 await self.publish(live)
 
     async def _gate(self, live):
@@ -231,7 +245,7 @@ class InteractiveHook(Hook):
             tags = live.get("failure_tags") or []
             if tags:
                 print("        tagged: %s" % ", ".join(tags), flush=True)
-        if SPEEDS[self.speed]:
+        if SPEEDS[self.speed] and not self.human_move:
             await asyncio.sleep(SPEEDS[self.speed])
 
     async def on_end(self, live, outcome):
