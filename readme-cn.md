@@ -41,53 +41,60 @@
 
 ## 0. 快速开始
 
-### 拿到代码
+### 下载代码，然后启动
+
+先安装 **Python 3.10+**（如尚未安装，可从 [python.org](https://www.python.org/downloads/) 获取）。
+Fork 本仓库后，克隆**你自己的 fork**，或下载 ZIP 并解压。
+在仓库根目录（包含 `start.py` 的目录）打开终端，执行：
 
 ```bash
-git clone https://github.com/scavin/Jev-2048
-cd Jev-2048/jev-lab
+python3 start.py
 ```
 
-### 一次性环境搭建
+Windows 使用 `py -3 start.py`。需要桌面环境和网络连接。启动器会自动：
+
+1. 在项目内创建 `.venv/`，安装缺失的 Python 依赖。
+2. 将 Chromium 下载到 `.jev/browsers/`，检查浏览器能否启动。
+3. 将固定版本 `1231850a0bf1a0c0341fe408ef1668dbbfdfac46` 的 Jev 客户端下载到 `.jev/`。
+   **无需安装 Git，也无需下载本地模型权重。**
+4. 提示输入 **TypeSafe API Key**，输入内容不显示。有效 Key 需要自行从
+   [TypeSafe](https://typesafe.ai) 获取；调用 API 可能产生费用。
+5. 启动游戏服务器，打开**可见的游戏窗口**和实时面板，让 `jev-features` 一局接一局地玩。
+
+保存 Key 前会询问你。输入 `y` 后，Key 以明文存入**仓库以外**的用户配置目录，避免被游戏的
+静态服务器公开：macOS/Linux 使用 `$XDG_CONFIG_HOME/jev-2048/credentials.env`
+（默认 `~/.config/jev-2048/credentials.env`），Windows 使用
+`%LOCALAPPDATA%\\jev-2048\\credentials.env`。提示中会显示实际路径。
+macOS/Linux 上仅文件所有者可访问，Windows 上遵循用户目录的 ACL 权限。
+不要分享此文件，删除它即可取消保存。凭据优先级为：环境变量 `TYPESAFE_API_KEY`、
+已保存的 Key、`$JEV_REPO/.env`。已有来源的 Key 不会被复制保存。
+
+### 下次启动
+
+仍在仓库根目录执行**同一条命令** `python3 start.py`。已有依赖、Chromium 和 Jev 客户端会被
+复用；如果保存了 Key，就不用激活虚拟环境，也不用再次 `export`。
+如果上次拒绝保存 Key，下次需重新输入或通过环境变量提供。
+
+### 只安装环境，不开始游戏
 
 ```bash
-# 1. an interpreter with the lab's two dependencies. httpx[http2] rather than plain httpx:
-#    jev's own client opens an http2 connection and raises without the h2 package.
-python3 -m venv ~/venvs/jev-lab
-~/venvs/jev-lab/bin/pip install playwright 'httpx[http2]'
-~/venvs/jev-lab/bin/playwright install chromium
-
-# 2. the decision layer calls two functions out of jev's own model.py
-git clone https://github.com/browser-use/jev-ultrafast ~/src/jev-ultrafast
-export JEV_REPO=~/src/jev-ultrafast
-
-# 3. a TypeSafe key: in $JEV_REPO/.env as TYPESAFE_API_KEY=…, or exported
-export TYPESAFE_API_KEY=...
+python3 start.py --setup-only
 ```
 
-| 做到哪一步 | 能跑什么 |
-|---|---|
-| 1 | `demo.py --mode random`、`greedy`、`heuristic` —— 真实对局，不用模型、不用凭据 |
-| 1 + 2 + 3 | jev 各模式，也就是 §9 里测过的全部内容 |
+此命令安装并检查环境，不询问 Key，也不调用模型 API。
+启动器不会安装或修改系统 Python，不向全局安装 pip 包，也不会自动执行 `sudo`。
+Linux 如果缺浏览器系统库，可能需要管理员安装；启动器只提示命令，不会静默提权安装。
 
-2048 服务器不必自己启动。`demo.py` 会检查 `127.0.0.1:8792`，没有服务就自己起一个静态服务器，
-并且只关掉自己起的那个。`run.py` 和 `benchmark.py` 假定页面已经在跑，因为批量任务不应该
-悄悄占有一个服务器。
+下载需要访问 PyPI、GitHub 和 Playwright 浏览器分发站点；Jev 对局还需访问 `api.typesafe.ai`。
+环境检查**不代表远端 Key 有效或账户额度充足**；第一次请求决策时仍可能遇到鉴权或网络错误。
 
-本文档里所有命令都写作 `python`；请用你装了依赖的那个解释器 —— 也就是上面这套里的
-`~/venvs/jev-lab/bin/python`。
+高级用法：设置 `JEV_REPO` 可复用已有客户端目录，设置 `PLAYWRIGHT_BROWSERS_PATH` 可复用
+浏览器缓存。启动器不会修改你指定的 Jev 目录。
+自行管理环境时仍可直接运行 `demo.py`；本文其他章节里的 `python` 命令假定已激活该环境，
+且当前目录是 `jev-lab/`。`demo.py` 自动启动游戏服务器，并且只关闭自己启动的那个；
+`run.py` 和 `benchmark.py` 则要求服务器已经运行。
 
-### 跑起来
-
-```bash
-~/venvs/jev-lab/bin/python demo.py
-```
-
-就这么简单。没有参数。它会检查模型能不能连上，打开一个可见的 Chromium 窗口加载游戏，
-在你的浏览器里打开实时面板，然后一局接一局地玩 —— 每局换新种子，你想让它跑多久就跑多久。
-
-先决条件缺失时，它会说清缺哪一个并以退出码 2 退出，而且是在**打开浏览器之前**，
-而不是玩到一半才失败。
+输出示例（使用较短的步数上限）：
 
 ```
   game 1 finished: max_steps after 25 moves, score 56, max tile 8
@@ -104,11 +111,11 @@ export TYPESAFE_API_KEY=...
 ### 接着可以试
 
 ```bash
-python demo.py --mode jev-board               # the failure case: one direction, forever
-python demo.py --mode jev-features --speed 1  # one move every 1.2s, to read each decision
-python demo.py --mode jev-state,jev-features  # alternate modes, to see the difference
-python demo.py --mode random                  # no API credentials needed
-python demo.py --max-steps 0                  # let every game run to its own end
+python3 start.py --mode jev-board              # 一个方向反复走的失败案例
+python3 start.py --mode jev-features --speed 1 # 放慢速度，细看决策
+python3 start.py --mode jev-state,jev-features # 交替使用两种模式
+python3 start.py --mode random                # 无需 API Key 或 Jev 客户端
+python3 start.py --max-steps 0                 # 每局玩到自然结束
 ```
 
 ### 预期会看到什么
@@ -657,6 +664,7 @@ heuristic 一局走 404 步，其中 10% 摸到 1024，而 jev 各模式要么�
 
 ```text
 .                          上游 2048 游戏（index.html、js/、style/、meta/）
+├── start.py               自动搭建项目环境并启动可见演示
 ├── readme.md              本文件              readme-cn.md  中文版
 ├── README-2048.md         上游游戏自己的 readme
 ├── game-test/             实验复用的既有控制代码：
@@ -687,12 +695,15 @@ lab 在标准库之外导入的东西，以及各自为什么需要。安装和�
 * **`httpx[http2]`** —— 决策层调用 jev 自己 `model.py` 里的 `model.post_json`，而它构造的是
   `httpx.Client(http2=True)`。普通 `httpx` 能走到第一步，然后因为缺 `h2` 包抛 ImportError；
   完全没有 httpx 则是同一行上的 `ModuleNotFoundError`。
-* **`JEV_REPO`** —— [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)
-  的 checkout。lab 从它里面导入 `post_json` 和 `validate_choice`，而不是自己重写请求路径。
-  默认值是 `/Users/scavin/Documents/Github/Jev`。
-* **`TYPESAFE_API_KEY`** —— 从 `$JEV_REPO/.env` 或环境变量读取。三个基线既不需要 key
-  也不需要 jev 的 checkout，所以 `--mode random` 是零配置路径。
+* **Jev 客户端源码** —— [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)。
+  启动器自动下载固定版本并设置 `JEV_REPO`。如果直接调用 lab，请自行把 `JEV_REPO` 指向已有
+  客户端目录；lab 复用它的 `post_json` 和 `validate_choice`，而不是重写请求路径。
+* **`TYPESAFE_API_KEY`** —— 按 §0 提供。三个基线不需要 Key 或 Jev 客户端，但仍需 Python、
+  Playwright 和 Chromium，不是零依赖运行。
 * **2048 页面**在 `http://127.0.0.1:8792`。`demo.py` 会替你启动；见 §0。
 
-验证方式就是照做一遍：从本仓库全新 clone、用上述命令建全新 virtualenv、对着全新 clone 的
-jev-ultrafast，`demo.py` 在可见窗口里连打六局并在 Ctrl-C 时干净退出。
+启动器已在 macOS 实测：创建全新项目虚拟环境、安装依赖、下载 Chromium 和固定版本
+Jev 客户端，并用这套安装完成真实的可见 Jev 对局。同时验证了复用已有浏览器缓存、
+隐藏输入 Key、经确认保存到仓库外（权限 0600），以及后续启动不再安装、下载或询问 Key。
+每局限 8 步的短对局会自动开始下一局；Ctrl-C 正常退出并关闭自行启动的服务器。
+也验证了缺少 Key 和无效 `JEV_REPO` 的报错。Windows/Linux 步骤尚未经过实际运行验证。

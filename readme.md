@@ -46,55 +46,67 @@ from the logs; if a jev mode loses to `greedy`, the table says so.
 
 ## 0. Getting started
 
-### Get the code
+### Download, then launch
+
+Install **Python 3.10+** from [python.org](https://www.python.org/downloads/) if needed.
+Fork this repository, then clone **your fork** or download and extract its ZIP.
+Open a terminal in the extracted repository (the directory containing `start.py`):
 
 ```bash
-git clone https://github.com/scavin/Jev-2048
-cd Jev-2048/jev-lab
+python3 start.py
 ```
 
-### Set up, once
+On Windows, use `py -3 start.py`. An interactive desktop and internet access are required.
+The launcher automatically:
+
+1. Creates `.venv/` inside the project and installs missing Python dependencies.
+2. Downloads Chromium into `.jev/browsers/` and checks that it can launch.
+3. Downloads the Jev client at pinned revision `1231850a0bf1a0c0341fe408ef1668dbbfdfac46`
+   into `.jev/`. Git and local model weights are **not** required.
+4. Asks for your **TypeSafe API key**, with input hidden. You must obtain a real key
+   from [TypeSafe](https://typesafe.ai); API usage may incur charges.
+5. Starts the game server, opens a **visible game window** and the live dashboard, and
+   lets `jev-features` play one game after another until you stop it.
+
+The launcher asks before saving a key. If you answer `y`, it saves plaintext **outside the
+repository**, so the game's static server cannot serve it: `$XDG_CONFIG_HOME/jev-2048/credentials.env`
+(default `~/.config/jev-2048/credentials.env`) on macOS/Linux, or
+`%LOCALAPPDATA%\\jev-2048\\credentials.env` on Windows. The prompt shows the exact path.
+macOS/Linux permissions are owner-only; Windows follows your user profile's ACLs.
+Do not share this file; delete it to forget the key. An exported `TYPESAFE_API_KEY` takes
+precedence, followed by the saved key and then `$JEV_REPO/.env`.
+Keys supplied through those existing sources are not copied.
+
+### Subsequent launches
+
+Run the **same command**, `python3 start.py`, from the repository root. Existing dependencies,
+Chromium and the Jev client are reused; no activation or `export` is needed if you saved
+the key. If you declined to save it, enter it again or provide it through the environment.
+
+### Setup without playing
 
 ```bash
-# 1. an interpreter with the lab's two dependencies. httpx[http2] rather than plain httpx:
-#    jev's own client opens an http2 connection and raises without the h2 package.
-python3 -m venv ~/venvs/jev-lab
-~/venvs/jev-lab/bin/pip install playwright 'httpx[http2]'
-~/venvs/jev-lab/bin/playwright install chromium
-
-# 2. the decision layer calls two functions out of jev's own model.py
-git clone https://github.com/browser-use/jev-ultrafast ~/src/jev-ultrafast
-export JEV_REPO=~/src/jev-ultrafast
-
-# 3. a TypeSafe key: in $JEV_REPO/.env as TYPESAFE_API_KEY=…, or exported
-export TYPESAFE_API_KEY=...
+python3 start.py --setup-only
 ```
 
-| steps done | what runs |
-|---|---|
-| 1 | `demo.py --mode random`, `greedy`, `heuristic` — real games, no model, no credentials |
-| 1 + 2 + 3 | the jev modes, i.e. everything measured in §9 |
+This installs/checks the environment without requesting a key or calling the model API.
+Python itself is not installed or changed. No global pip installs or automatic `sudo`
+commands are run. On Linux, missing browser system libraries may require an administrator;
+the launcher prints the command to run instead of installing them silently.
 
-You do not have to start the 2048 server. `demo.py` checks `127.0.0.1:8792` and starts a static
-server itself when nothing is serving it, stopping only the one it started. `run.py` and
-`benchmark.py` assume the page is already there, because a batch should not quietly own a
-server.
+Downloads require access to PyPI, GitHub and Playwright's browser distribution.
+Playing Jev also requires access to `api.typesafe.ai`. Setup checks local dependencies,
+**not** remote key validity or available API credit; authentication/network errors can
+still occur when the first decision is requested.
 
-Every command in this readme is written `python`; use the interpreter you installed the
-dependencies into — `~/venvs/jev-lab/bin/python` above.
+Advanced: set `JEV_REPO` to use an existing client checkout, or `PLAYWRIGHT_BROWSERS_PATH`
+to reuse a browser cache. The launcher does not modify the supplied Jev checkout.
+`demo.py` remains available for an environment you manage yourself. Examples elsewhere
+using `python` assume that environment is active and the working directory is `jev-lab/`.
+`demo.py` starts/stops only its own game server; `run.py` and `benchmark.py` require a
+server that is already running.
 
-### Run it
-
-```bash
-~/venvs/jev-lab/bin/python demo.py
-```
-
-That is the whole thing. No arguments. It checks that the model is reachable, opens a visible
-Chromium window on the game, opens the live panel in your browser, and then plays one game
-after another — fresh seed each time, for as long as you leave it running.
-
-If a prerequisite is missing it says which one and exits 2, **before** opening a browser rather
-than halfway through a game.
+Example output (using a short step limit):
 
 ```
   game 1 finished: max_steps after 25 moves, score 56, max tile 8
@@ -111,11 +123,11 @@ summary. A game interrupted halfway keeps the moves it actually made.
 ### Then try
 
 ```bash
-python demo.py --mode jev-board               # the failure case: one direction, forever
-python demo.py --mode jev-features --speed 1  # one move every 1.2s, to read each decision
-python demo.py --mode jev-state,jev-features  # alternate modes, to see the difference
-python demo.py --mode random                  # no API credentials needed
-python demo.py --max-steps 0                  # let every game run to its own end
+python3 start.py --mode jev-board              # the failure case: one direction, forever
+python3 start.py --mode jev-features --speed 1 # slow down to read each decision
+python3 start.py --mode jev-state,jev-features # alternate modes
+python3 start.py --mode random                # no API key or Jev client needed
+python3 start.py --max-steps 0                 # let every game run to its own end
 ```
 
 ### What to expect
@@ -705,6 +717,7 @@ experiment recovered it.
 
 ```text
 .                          the upstream 2048 game (index.html, js/, style/, meta/)
+├── start.py               automatic project setup and visible demo launcher
 ├── readme.md              this file            readme-cn.md  the Chinese version
 ├── README-2048.md         the upstream game's own readme
 ├── prompt.md              the brief this experiment was built against (Chinese)
@@ -738,13 +751,18 @@ that install and configure all of it are in §0.
   which builds an `httpx.Client(http2=True)`. Plain `httpx` gets as far as the first move and
   then raises an ImportError about the `h2` package; without httpx at all it is a
   `ModuleNotFoundError` on the same line.
-* **`JEV_REPO`** — the [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)
-  checkout. The lab imports `post_json` and `validate_choice` from it rather than
-  reimplementing the request path. Defaults to `/Users/scavin/Documents/Github/Jev`.
-* **`TYPESAFE_API_KEY`** — read from `$JEV_REPO/.env` or from the environment. The baselines
-  need neither the key nor the jev checkout, so `--mode random` is the zero-setup path.
+* **Jev client source** — [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast).
+  The launcher downloads a pinned revision and sets `JEV_REPO` automatically. To invoke the
+  lab directly, set `JEV_REPO` to your own checkout; the lab reuses its `post_json` and
+  `validate_choice` rather than reimplementing the request path.
+* **`TYPESAFE_API_KEY`** — supplied as described in §0. The baselines need neither the key
+  nor the Jev client, but still require Python, Playwright and Chromium.
 * **The 2048 page** on `http://127.0.0.1:8792`. `demo.py` starts it for you; see §0.
 
-Verified by doing exactly this from a fresh clone of this repository, in a fresh virtualenv
-built with those commands, against a fresh clone of jev-ultrafast: `demo.py` played six games
-in a visible window and exited cleanly on Ctrl-C.
+Launcher verification on macOS: created a fresh project venv, installed dependencies,
+downloaded Chromium and the pinned Jev client, and completed a real headed Jev game with
+that installation. Also verified reuse of an existing Chromium cache, hidden key entry,
+explicit saving outside the repository (mode 0600), and subsequent launches without an
+install/download/key prompt. Short 8-step games restarted automatically; Ctrl-C exited
+cleanly and stopped the owned servers. Missing-key and invalid `JEV_REPO` errors were
+exercised. Windows/Linux instructions have not been runtime-tested.
