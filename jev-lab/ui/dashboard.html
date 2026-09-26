@@ -31,6 +31,25 @@
   </section>
 
   <section class="col col-right">
+    <div class="card" id="key-card">
+      <div class="card-head">
+        <h2 data-i18n="cardKey">API Key</h2>
+        <span class="key-state" id="key-state">--</span>
+      </div>
+      <form class="key-form" id="key-form">
+        <input type="password" id="key-input" autocomplete="off" spellcheck="false"
+               placeholder="paste the TypeSafe key" data-i18n-placeholder="keyPlaceholder">
+        <button type="submit" class="btn" data-i18n="keySubmit">Use key</button>
+      </form>
+      <label class="key-remember">
+        <input type="checkbox" id="key-save" checked>
+        <span data-i18n="keyRemember">save on this machine</span>
+      </label>
+      <p class="key-note" data-i18n="keyNote">The key goes to this machine's runner only, over
+        loopback. It is never shown again. Saving writes it outside the repository with
+        owner-only permissions.</p>
+    </div>
+
     <div class="card">
       <div class="stats" id="stats"></div>
     </div>

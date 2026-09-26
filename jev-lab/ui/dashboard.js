@@ -65,6 +65,17 @@ const STRINGS = {
     btnStep: "Step",
     btnReset: "Reset",
     hint: "arrow keys or W A S D",
+    cardKey: "API Key",
+    keyMissing: "not set",
+    keySaved: "set, saved on this machine",
+    keySession: "set for this session",
+    keyPlaceholder: "paste the TypeSafe key",
+    keySubmit: "Use key",
+    keyRemember: "save on this machine",
+    keyNote: "The key is sent to this machine's runner over loopback, never shown again, and "
+      + "never written inside the repository. Saving keeps it in a file only you can read.",
+    keyRejected: "rejected: ",
+    keyFailed: "could not reach the runner",
     controlSpeed: "speed ",
     controlPending: "pending ",
     controlYouPlay: "you play",
@@ -109,6 +120,17 @@ const STRINGS = {
     btnStep: "单步",
     btnReset: "重置",
     hint: "方向键或 W A S D",
+    cardKey: "API Key",
+    keyMissing: "未配置",
+    keySaved: "已配置，已保存到本机",
+    keySession: "已配置，仅本次运行",
+    keyPlaceholder: "粘贴 TypeSafe API Key",
+    keySubmit: "使用该 Key",
+    keyRemember: "保存到本机",
+    keyNote: "Key 只通过本机回环地址交给 runner，之后不会再显示，也不会写入仓库目录。"
+      + "勾选保存后，它存放在仅你可读的文件中。",
+    keyRejected: "被拒绝：",
+    keyFailed: "无法连接 runner",
     controlSpeed: "速度 ",
     controlPending: "待执行 ",
     controlYouPlay: "你来操作",
@@ -125,6 +147,7 @@ const STRINGS = {
     "status.max_steps": "已达步数上限",
     "status.aborted": "已中止",
     "status.unknown": "未知",
+    "status.waiting for api key": "等待 API Key",
     "check.Loop": "循环",
     "check.Repeated State": "重复局面",
     "check.Invalid Repeat": "无效重复",
@@ -186,6 +209,9 @@ function applyStatic() {
   for (const node of document.querySelectorAll("[data-i18n-aria]")) {
     node.setAttribute("aria-label", t(node.dataset.i18nAria));
   }
+  for (const node of document.querySelectorAll("[data-i18n-placeholder]")) {
+    node.placeholder = t(node.dataset.i18nPlaceholder);
+  }
 }
 
 const dom = {
@@ -206,6 +232,10 @@ const dom = {
   btnManual: document.getElementById("btn-manual"),
   btnAuto: document.getElementById("btn-auto"),
   humanHint: document.getElementById("human-hint"),
+  keyState: document.getElementById("key-state"),
+  keyForm: document.getElementById("key-form"),
+  keyInput: document.getElementById("key-input"),
+  keySave: document.getElementById("key-save"),
 };
 
 // A human plays with the same four directions the policies choose from.
@@ -666,6 +696,50 @@ async function fetchControl() {
 
 /* -- polling ---------------------------------------------------------------- */
 
+function renderKey(state, available) {
+  const info = available && isObject(state.api_key) ? state.api_key : null;
+  if (!info || typeof info.configured !== "boolean") {
+    dom.keyState.textContent = MISSING;
+    dom.keyState.dataset.state = "unknown";
+    return;
+  }
+  dom.keyState.textContent = info.configured
+    ? (info.saved === true ? t("keySaved") : t("keySession"))
+    : t("keyMissing");
+  dom.keyState.dataset.state = info.configured ? "set" : "unset";
+}
+
+async function postKey(key, save) {
+  try {
+    const response = await fetch("/api/key", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: key, save: save === true }),
+    });
+    if (!response.ok) {
+      dom.keyState.textContent = t("keyRejected") + (await response.text()).trim();
+      dom.keyState.dataset.state = "unset";
+      return false;
+    }
+    dom.keyInput.value = "";   // the secret does not stay in the page
+    const body = await response.json();
+    dom.keyState.textContent = body.saved_to ? t("keySaved") : t("keySession");
+    dom.keyState.dataset.state = "set";
+    return true;
+  } catch (error) {
+    dom.keyState.textContent = t("keyFailed");
+    dom.keyState.dataset.state = "unknown";
+    return false;
+  }
+}
+
+dom.keyForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const key = dom.keyInput.value.trim();
+  if (!key) return;
+  postKey(key, dom.keySave.checked);
+});
+
 function renderState(state, available) {
   const source = available ? state : {};
   renderHeader(isObject(state) ? state : {}, available);
@@ -677,6 +751,7 @@ function renderState(state, available) {
   renderFeatures(source);
   renderScreenshot(source, available);
   applyManual(available ? source.manual : undefined);
+  renderKey(source, available);
 }
 
 async function poll() {

@@ -24,10 +24,6 @@ import zipfile
 ROOT = Path(__file__).resolve().parent
 ENV_DIR = ROOT / ".venv"
 LOCAL = ROOT / ".jev"
-# Keep secrets outside the repository served by the game's static HTTP server.
-CONFIG_HOME = Path(os.environ.get("LOCALAPPDATA" if os.name == "nt" else "XDG_CONFIG_HOME")
-                   or Path.home() / ".config").expanduser()
-KEY_FILE = CONFIG_HOME / "jev-2048" / "credentials.env"
 JEV_REVISION = "1231850a0bf1a0c0341fe408ef1668dbbfdfac46"
 JEV_SOURCE = LOCAL / ("jev-ultrafast-" + JEV_REVISION)
 # name -> (minimum, exclusive maximum or None, pip requirement). The versions this repository
@@ -167,13 +163,16 @@ def ensure_jev(override):
 
 
 def configure_key():
+    """Ask for a key in the terminal. Only used when there is no panel to type one into."""
     # Reuse the same .env reader and precedence as the demo: environment wins.
     sys.path.insert(0, str(ROOT / "jev-test"))
     from jev_client import load_env
 
-    load_env(str(KEY_FILE))
+    import credentials
+
+    credentials.load()
     load_env()
-    if os.environ.get("TYPESAFE_API_KEY", "").strip():
+    if credentials.configured():
         say("Using configured TypeSafe API key (not displayed).")
         return
     if not sys.stdin.isatty():
@@ -184,23 +183,16 @@ def configure_key():
     key = getpass.getpass("TYPESAFE_API_KEY (hidden): ").strip()
     if not key or any(char in key for char in "\r\n"):
         raise RuntimeError("An API key is required; no game was started.")
-    os.environ["TYPESAFE_API_KEY"] = key
+    os.environ[credentials.ENV_NAME] = key
     save = input("Save key in %s for future launches? Plaintext, outside the repository. "
-                 "[y/N] " % KEY_FILE).strip().lower()
+                 "[y/N] " % credentials.KEY_FILE).strip().lower()
     if save in ("y", "yes"):
-        if KEY_FILE.resolve().is_relative_to(ROOT):
+        if credentials.KEY_FILE.resolve().is_relative_to(ROOT):
             raise RuntimeError("Refusing to save a key inside the game's web root. "
                                "Choose a config directory outside the repository.")
-        KEY_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        if os.name != "nt":
-            KEY_FILE.parent.chmod(0o700)
-        descriptor = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w") as handle:
-            if os.name != "nt":
-                os.fchmod(handle.fileno(), 0o600)
-            handle.write("TYPESAFE_API_KEY=" + key + "\n")
+        credentials.save(key)
         say("Saved locally: %s. Delete this file to forget the key. "
-            "On Windows, access is governed by your user profile's ACLs." % KEY_FILE)
+            "On Windows, access is governed by your user profile's ACLs." % credentials.KEY_FILE)
 
 
 def main():
@@ -231,7 +223,8 @@ def main():
     if args.setup_only:
         say("Setup complete. Run python3 start.py to play; no API request was made.")
         return 0
-    if needs_jev:
+    if needs_jev and options.retro:
+        # --retro has no panel, so the terminal is the only place a key can be entered.
         configure_key()
     say("Starting demo. Ctrl-C to stop; --retro also stops when the game window closes.")
     from playwright.sync_api import Error

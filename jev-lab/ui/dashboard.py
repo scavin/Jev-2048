@@ -22,6 +22,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import credentials  # noqa: E402  (the one place a key is written)
 import labpaths  # noqa: F401  (project root + reused modules on sys.path)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -117,7 +118,23 @@ class _Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
+    def _loopback_name(self):
+        """Reject a loopback server reached by some other name, which is DNS rebinding.
+
+        The panel is unauthenticated, and one of its endpoints writes a credential file, so a
+        page that points its own domain at 127.0.0.1 must not be able to talk to it. A server
+        deliberately bound to another address is left alone: it is not reachable by rebinding.
+        """
+        bound = str(self.server.server_address[0])
+        if bound not in ("127.0.0.1", "::1", "localhost"):
+            return True
+        name = (self.headers.get("Host") or "").strip().rsplit(":", 1)[0].strip("[]").lower()
+        return name in ("127.0.0.1", "localhost", "::1")
+
     def do_GET(self):  # noqa: N802 (http.server naming)
+        if not self._loopback_name():
+            self._send_plain(403, "this server only answers to loopback names")
+            return
         parsed = urlparse(self.path)
         route = parsed.path.rstrip("/") or "/"
         if route == "/":
@@ -136,7 +153,13 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_plain(404, "not found")
 
     def do_POST(self):  # noqa: N802 (http.server naming)
+        if not self._loopback_name():
+            self._send_plain(403, "this server only answers to loopback names")
+            return
         route = urlparse(self.path).path.rstrip("/") or "/"
+        if route == "/api/key":
+            self._accept_key()
+            return
         if route != "/api/control":
             self._send_plain(404, "not found")
             return
@@ -218,6 +241,35 @@ class _Handler(BaseHTTPRequestHandler):
         self._send_json(payload)
 
     # -- requests -------------------------------------------------------------------
+
+    def _accept_key(self):
+        """Take a key from the panel.
+
+        This process is the one running the game, so setting the variable here is enough for
+        the next decision. The key is never echoed back, never logged, and never written
+        inside the repository: the response says only that it arrived.
+        """
+        body = self._read_body()
+        if body is None:
+            self._send_plain(400, "body must be a JSON object")
+            return
+        key = body.get("key")
+        if not isinstance(key, str) or any(character in key for character in "\r\n"):
+            self._send_plain(400, "key must be a single-line string")
+            return
+        key = key.strip()
+        if not key or len(key) > 512:
+            self._send_plain(400, "key must be between 1 and 512 characters")
+            return
+        saved_to = None
+        if body.get("save") is True:
+            try:
+                saved_to = str(credentials.save(key))
+            except OSError as error:
+                self._send_plain(500, "could not save the key: %s" % error)
+                return
+        os.environ[credentials.ENV_NAME] = key
+        self._send_json({"configured": True, "saved_to": saved_to})
 
     def _read_body(self):
         length = _as_int(self.headers.get("Content-Length"), 0)

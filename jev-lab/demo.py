@@ -107,7 +107,9 @@ def parse_modes(raw):
 def main(argv=None):
     args = parse_args(argv)
     modes = parse_modes(args.mode)
-    if not args.cdp and any(name in JEV_MODES for name in modes):
+    # Without a panel there is nowhere to type a key, so this is the last chance to say so
+    # before a browser opens. With one, the runner waits and the panel collects it.
+    if args.retro and not args.cdp and any(name in JEV_MODES for name in modes):
         try:
             from jev.client import JevClient
 

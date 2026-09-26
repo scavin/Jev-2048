@@ -358,6 +358,32 @@ body {
 
 .human-hint { color: var(--dim); font-size: 13px; letter-spacing: 1px; }
 
+/* -- api key card ----------------------------------------------------------- */
+
+.key-state { font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--dim); }
+.key-state[data-state="set"] { color: var(--accent); }
+.key-state[data-state="unset"] { color: var(--warn); }
+
+.key-form { display: flex; gap: 8px; margin: 10px 0 8px; }
+
+.key-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px 10px;
+}
+
+.key-form input:focus { border-color: var(--accent); outline: none; }
+
+.key-remember { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
+
+.key-note { margin: 8px 0 0; color: var(--dim); font-size: 12px; line-height: 1.5; }
+
 .speed { display: flex; align-items: center; gap: 8px; color: var(--dim); font-size: 13px; }
 
 .speed select {

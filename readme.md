@@ -18,9 +18,11 @@ Watch Jev play 2048 automatically, in the new dashboard or the original game win
 
 The first launch fills in whatever is missing: it reuses dependencies and a Chromium that
 are already on the machine, and only installs or downloads what is absent.
-Then enter your API key when prompted; the input is hidden. Answer `y` to save it for
-future launches as plaintext in your local configuration directory, outside the repository.
-Internet access is required, and API calls may incur charges.
+Then paste your **TypeSafe API key** into the panel's API Key card. Tick *save on this
+machine* to keep it for later launches; it is written outside the repository, readable only
+by you. Internet access is required, and API calls may incur charges.
+
+`--retro` has no panel, so there the terminal asks for the key instead, with hidden input.
 
 Jev starts playing automatically and starts a new game after each one ends.
 The default dashboard is at [http://127.0.0.1:8799/](http://127.0.0.1:8799/).
@@ -35,6 +37,9 @@ The default dashboard is at [http://127.0.0.1:8799/](http://127.0.0.1:8799/).
 - **Language**: the panel follows your browser's language list. It is available in English and
   Chinese, and anything else falls back to English. The game window is the upstream game and
   keeps its own wording.
+- **API key**: the panel's card shows whether one is set. Paste a new one to replace it, with
+  or without saving it, at any time; the next move uses it. Until a key is set, the panel says
+  `waiting for api key` and the game does not start.
 - **Stop** with `Ctrl-C` in the terminal. In retro mode, closing the game window also stops it.
   Closing the dashboard tab does not stop the background game.
 - **Launch again** with the same command. The environment is reused, and a saved key needs no re-entry.
@@ -687,8 +692,9 @@ advanced options are at the end of this section.
   The launcher downloads a pinned revision and sets `JEV_REPO` automatically. To invoke the
   lab directly, set `JEV_REPO` to your own checkout; the lab reuses its `post_json` and
   `validate_choice` rather than reimplementing the request path.
-* **`TYPESAFE_API_KEY`** — supplied as described in §0. The baselines need neither the key
-  nor the Jev client, but still require Python, Playwright and Chromium.
+* **`TYPESAFE_API_KEY`** — entered in the panel, or supplied through the environment or the
+  saved credentials file; see §0. The baselines need neither the key nor the Jev client, but
+  still require Python, Playwright and Chromium.
 * **The 2048 page** on `http://127.0.0.1:8792`. `demo.py` starts it for you; see §0.
 
 Launcher verification on macOS: created a fresh project venv, installed dependencies,
@@ -722,6 +728,14 @@ The panel's language was verified by loading it with a browser reporting `zh-CN`
 `en-US` and `fr-FR`: Chinese for the first two, English for the other two, with the stats,
 check names, feature labels and status chip translated and the English panel unchanged.
 
+Entering the key from the panel was verified against a real run started with no key anywhere:
+the demo and the panel came up, the status read `waiting for api key`, and no move was played
+until a key was typed into the card. Submitting it wrote the file with mode 0600 outside the
+repository, cleared the input, flipped the card to "set, saved on this machine", and the game
+began playing with real decisions. The key appeared in no HTTP response (`/api/state`,
+`/api/control`, the page, the script, the log) and in no file inside the repository. Without a
+panel, `start.py --retro` and `demo.py --retro` still refuse with exit 2 and say why.
+
 ### Installation and configuration details
 
 - The launcher installs missing dependencies into the project's `.venv/`, and downloads only
@@ -738,11 +752,14 @@ check names, feature labels and status chip translated and the English panel unc
   Missing Linux system libraries produce instructions for an administrator.
 - Downloads require PyPI, GitHub and Playwright's browser distribution. Jev decisions require
   `api.typesafe.ai`. Local checks do not validate remote credentials or available API credit.
-- Saving a key requires your consent. On macOS/Linux the default location is
-  `~/.config/jev-2048/credentials.env`; `XDG_CONFIG_HOME` overrides the configuration directory.
-  Windows uses `%LOCALAPPDATA%\jev-2048\credentials.env`. The prompt shows the exact path.
-  Permissions are owner-only on macOS/Linux; Windows follows your user profile's ACLs.
-  Do not share this plaintext file. Delete it to forget the saved key.
+- The key is entered in the panel, sent to the runner in this process over loopback, and never
+  returned to the page: the card shows only whether one is set. Saving writes it outside the
+  repository, at `~/.config/jev-2048/credentials.env` on macOS/Linux (`XDG_CONFIG_HOME`
+  overrides the directory) or `%LOCALAPPDATA%\jev-2048\credentials.env` on Windows, owner-only
+  on macOS/Linux and governed by your profile's ACLs on Windows. Do not share this plaintext
+  file; delete it to forget the key. `--retro` has no panel, so there the terminal asks.
+- The panel's endpoints answer only to loopback names, so a page that points its own domain at
+  `127.0.0.1` cannot reach them.
 - Credential precedence: exported `TYPESAFE_API_KEY`, saved key, then `$JEV_REPO/.env`.
   Without a saved key, enter it again next time or supply it through the environment.
 - Set `JEV_REPO` to reuse your own client checkout or `PLAYWRIGHT_BROWSERS_PATH` to reuse

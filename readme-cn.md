@@ -17,8 +17,10 @@
 | 复古 2048 窗口 | `python3 start.py --retro` | `py -3 start.py --retro` |
 
 首次启动只补齐缺的部分：机器上已有的依赖和 Chromium 会直接复用，缺失的才安装或下载。
-等待完成后，按提示输入 API Key，输入时不显示字符。询问是否保存时，输入 `y` 可供下次使用；
-Key 会以明文保存在仓库外的本机配置目录。需要联网，API 调用可能产生费用。
+然后把 **TypeSafe API Key** 粘贴到面板的 “API Key” 卡片里。勾选“保存到本机”即可下次继续使用，
+文件存放在仓库之外，只有你能读取。需要联网，API 调用可能产生费用。
+
+`--retro` 没有面板，因此在那种模式下改由终端询问 Key，输入时不显示字符。
 
 启动后 Jev 会自动开始，一局结束后继续下一局。默认的新面板地址是
 [http://127.0.0.1:8799/](http://127.0.0.1:8799/)。
@@ -31,6 +33,8 @@ Key 会以明文保存在仓库外的本机配置目录。需要联网，API 调
   只有新面板提供操作界面，`--retro` 只显示游戏窗口。
 - **界面语言**：面板跟随浏览器的语言列表，提供中文和英文，其它语言回退到英文。
   游戏窗口是上游原版游戏，文字不随之改变。
+- **API Key**：面板卡片显示当前是否已配置。随时可以粘贴新的 Key 替换，是否保存由你决定，
+  下一步就会使用它。未配置时面板显示 `等待 API Key`，游戏不会开始。
 - **停止**：在终端按 `Ctrl-C`。复古模式也可以关闭游戏窗口；关闭新面板标签页不会停止后台游戏。
 - **下次启动**：执行同一条命令。环境会复用；保存过 Key 就不用再次输入。
   每次启动都从自动模式开始：上一次的模式和你没走完的按键不会被继承。
@@ -634,8 +638,8 @@ heuristic 一局走 404 步，其中 10% 摸到 1024，而 jev 各模式要么�
 * **Jev 客户端源码** —— [browser-use/jev-ultrafast](https://github.com/browser-use/jev-ultrafast)。
   启动器自动下载固定版本并设置 `JEV_REPO`。如果直接调用 lab，请自行把 `JEV_REPO` 指向已有
   客户端目录；lab 复用它的 `post_json` 和 `validate_choice`，而不是重写请求路径。
-* **`TYPESAFE_API_KEY`** —— 按 §0 提供。三个基线不需要 Key 或 Jev 客户端，但仍需 Python、
-  Playwright 和 Chromium，不是零依赖运行。
+* **`TYPESAFE_API_KEY`** —— 在面板中录入，或通过环境变量、已保存的凭据文件提供；见 §0。
+  三个基线不需要 Key 或 Jev 客户端，但仍需 Python、Playwright 和 Chromium，不是零依赖运行。
 * **2048 页面**在 `http://127.0.0.1:8792`。`demo.py` 会替你启动；见 §0。
 
 启动器已在 macOS 实测：创建全新项目虚拟环境、安装依赖、下载 Chromium 和固定版本
@@ -663,6 +667,13 @@ Jev 客户端，并用这套安装完成真实的可见 Jev 对局。同时验�
 前两者显示中文，后两者显示英文；统计项、检查项名称、特征标签和状态都随之切换，
 英文面板保持不变。
 
+从面板录入 Key 也做过真实验证：在完全没有 Key 的情况下启动，演示和面板正常打开，
+状态为 `waiting for api key`，在卡片里输入 Key 之前一步都不走。提交后文件以 0600 权限
+写入仓库之外，输入框被清空，卡片变为“已配置，已保存到本机”，随后游戏开始用真实模型对局。
+Key 没有出现在任何 HTTP 响应中（`/api/state`、`/api/control`、页面、脚本、日志），
+也没有出现在仓库内的任何文件里。没有面板时，`start.py --retro` 和 `demo.py --retro`
+仍会以退出码 2 拒绝并说明原因。
+
 ### 安装与配置细节
 
 - 启动器把缺失的依赖装进项目内的 `.venv/`，只在 `.jev/` 下载固定版本的 Jev 客户端。
@@ -676,10 +687,12 @@ Jev 客户端，并用这套安装完成真实的可见 Jev 对局。同时验�
 - 不修改系统 Python，不全局安装 pip 包，不自动执行 `sudo`。Linux 缺系统库时会提示管理员安装命令。
 - 下载需访问 PyPI、GitHub 和 Playwright 浏览器分发站点；Jev 决策需访问 `api.typesafe.ai`。
   本地环境检查不验证远端 Key 是否有效或额度是否充足。
-- 保存 Key 前会询问。macOS/Linux 默认保存在 `~/.config/jev-2048/credentials.env`，
-  可通过 `XDG_CONFIG_HOME` 指定配置目录；Windows 使用 `%LOCALAPPDATA%\jev-2048\credentials.env`。
-  提示中会显示实际路径。macOS/Linux 权限仅限文件所有者，Windows 遵循用户目录的 ACL 权限。
-  不要分享这个明文文件，删除它即可取消保存。
+- Key 在面板中输入，通过回环地址交给本进程的 runner，之后不会返回给页面：卡片只显示是否已配置。
+  勾选保存后写入仓库之外：macOS/Linux 为 `~/.config/jev-2048/credentials.env`
+  （可用 `XDG_CONFIG_HOME` 改目录），Windows 为 `%LOCALAPPDATA%\jev-2048\credentials.env`。
+  macOS/Linux 权限仅限文件所有者，Windows 遵循用户目录的 ACL 权限。
+  不要分享这个明文文件，删除它即可取消保存。`--retro` 没有面板，改由终端询问。
+- 面板的接口只接受回环地址的请求名，因此把域名指向 `127.0.0.1` 的网页无法访问它们。
 - 凭据优先级：环境变量 `TYPESAFE_API_KEY`、已保存的 Key、`$JEV_REPO/.env`。
   未保存时，下次需重新输入或通过环境变量提供。
 - 设置 `JEV_REPO` 可复用自己的客户端目录，设置 `PLAYWRIGHT_BROWSERS_PATH` 可复用浏览器缓存。

@@ -18,6 +18,7 @@ Nothing here asks a model anything.
 | `run_tests.py` | The suite: differential move checks, restart, persistence, game over, win / keep playing |
 | `mutants.py` | Five real defects injected into private copies of the game; the suite must fail on every one |
 | `test_demo_controls.py` | Regressions: a saved dashboard command cannot stall a retro demo, a human move is played once and in order, the panel's move sequence never restarts, and a new session forgets the last one's mode |
+| `test_credentials.py` | The key store and the panel endpoint: owner-only writes outside the repository, nothing echoed to a browser, and the runner's wait when there is no key |
 
 ## How the suite decides things
 
@@ -56,6 +57,7 @@ Run the dashboard-control regression without a browser, server or API key:
 
 ```bash
 python game-test/test_demo_controls.py
+python game-test/test_credentials.py
 ```
 
 ## Notes on the game's observable contract

@@ -18,8 +18,9 @@ import time
 
 import labpaths  # noqa: F401
 
+import credentials
 from game.adapter import GameAdapter
-from players import build
+from players import JEV_MODES, build
 from players.base import Decision
 from runner.browser import BrowserSession
 from runner.game_loop import GameRunner, Hook, LogWriter
@@ -285,7 +286,8 @@ class InteractiveHook(Hook):
         payload = dict(live)
         payload.update(paused=self.paused, speed=self.speed, step_mode=self.paused,
                        shots=self.shots, manual=self.manual,
-                       moves_done=self.control["moves_done"], updated_at=time.time())
+                       moves_done=self.control["moves_done"],
+                       api_key=credentials.status(), updated_at=time.time())
         write_json_atomic(self.state_path, payload)
         await self._maybe_screenshot()
 
@@ -304,6 +306,30 @@ class InteractiveHook(Hook):
             if self.screenshot_failures in (1, 5, 20):
                 print("  (screenshot skipped: %s)" % exc, flush=True)
             self.screenshot_interval = min(self.screenshot_interval * 2, 5.0)
+
+
+async def await_api_key(modes, state_path, dashboard=True):
+    """Block until a key exists, telling the panel why nothing is happening yet.
+
+    A jev mode cannot even be constructed without one, and the panel is where a human can now
+    supply it, so the wait belongs before the first game rather than inside it. Without a panel
+    there is nowhere to type it, so the failure is immediate and says what to do.
+    """
+    if not any(mode in JEV_MODES for mode in modes) or credentials.configured():
+        return
+    if not dashboard:
+        raise RuntimeError(
+            "TYPESAFE_API_KEY is missing and there is no dashboard to enter it in. Set it in "
+            "the environment or in %s, or drop --no-dashboard." % credentials.KEY_FILE)
+    while not credentials.configured():
+        write_json_atomic(state_path, {
+            "available": True, "status": "waiting for api key", "mode": "+".join(modes),
+            "step": 0, "board": [], "score": 0, "max_tile": 0, "empty_cells": 0,
+            "latency_ms": 0.0, "chosen": None, "probabilities": None, "recent_moves": [],
+            "checks": {}, "features": {}, "failure_tags": [],
+            "api_key": credentials.status(), "updated_at": time.time(),
+        })
+        await asyncio.sleep(0.25)
 
 
 async def play_interactive(adapter, mode, seed, game_id, max_steps, log, hook):
@@ -372,6 +398,8 @@ async def run_interactive(mode, seed=2048, games=1, max_steps=5000, log_path=Non
           % ("+".join(modes), session.mode, url or "off",
              "until stopped" if games <= 0 else games),
           flush=True)
+    # The panel is up by now, so a missing key is something the human can fix in the page.
+    await await_api_key(modes, STATE_PATH, dashboard=bool(board))
     outcomes = []
     played = 0
     try:
