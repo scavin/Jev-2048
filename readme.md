@@ -2,6 +2,43 @@
 
 # Jev-2048 — a 2048 testbed for one question
 
+Watch Jev play 2048 automatically, in the new dashboard or the original game window.
+
+
+## 0. Getting started
+
+1. Install [Python 3.10+](https://www.python.org/downloads/) and get a valid [TypeSafe API key](https://typesafe.ai).
+2. Fork this repository, then download and extract its ZIP or clone your fork.
+3. Open a terminal in the folder containing `start.py` and run:
+
+| Interface | macOS / Linux | Windows |
+|---|---|---|
+| New dashboard (default) | `python3 start.py` | `py -3 start.py` |
+| Original 2048 window | `python3 start.py --retro` | `py -3 start.py --retro` |
+
+The first launch installs dependencies and downloads Chromium and the Jev client.
+Then enter your API key when prompted; the input is hidden. Answer `y` to save it for
+future launches as plaintext in your local configuration directory, outside the repository.
+Internet access is required, and API calls may incur charges.
+
+Jev starts playing automatically and starts a new game after each one ends.
+The default dashboard is at [http://127.0.0.1:8799/](http://127.0.0.1:8799/).
+
+### Everyday controls
+
+- **Pause, resume, step and change speed** in the dashboard. Step lets Jev make one move;
+  choosing directions manually is not supported.
+- **Stop** with `Ctrl-C` in the terminal. In retro mode, closing the game window also stops it.
+  Closing the dashboard tab does not stop the background game.
+- **Launch again** with the same command. The environment is reused, and a saved key needs no re-entry.
+
+Tested on macOS; Windows/Linux have not been runtime-tested.
+See [Requirements](#12-requirements) for installation and credential details.
+
+---
+
+## About the experiment
+
 A harness experiment, not a 2048 bot.
 
 The game is the upstream [2048](https://github.com/gabrielecirulli/2048) by Gabriele Cirulli,
@@ -41,132 +78,6 @@ The question the whole thing exists to answer:
 
 Nothing in this repository encodes an expected winner. The comparison table is generated
 from the logs; if a jev mode loses to `greedy`, the table says so.
-
----
-
-## 0. Getting started
-
-### Download, then launch
-
-Install **Python 3.10+** from [python.org](https://www.python.org/downloads/) if needed.
-Fork this repository, then clone **your fork** or download and extract its ZIP.
-Open a terminal in the extracted repository (the directory containing `start.py`):
-
-```bash
-python3 start.py
-```
-
-On Windows, use `py -3 start.py`. An interactive desktop and internet access are required.
-The launcher automatically:
-
-1. Creates `.venv/` inside the project and installs missing Python dependencies.
-2. Downloads Chromium into `.jev/browsers/` and checks that it can launch.
-3. Downloads the Jev client at pinned revision `1231850a0bf1a0c0341fe408ef1668dbbfdfac46`
-   into `.jev/`. Git and local model weights are **not** required.
-4. Asks for your **TypeSafe API key**, with input hidden. You must obtain a real key
-   from [TypeSafe](https://typesafe.ai); API usage may incur charges.
-5. Starts the game server and opens **only the new dashboard**, where `jev-features` plays
-   successive games. The original game runs in background Chromium; there is no second window.
-
-The launcher asks before saving a key. If you answer `y`, it saves plaintext **outside the
-repository**, so the game's static server cannot serve it: `$XDG_CONFIG_HOME/jev-2048/credentials.env`
-(default `~/.config/jev-2048/credentials.env`) on macOS/Linux, or
-`%LOCALAPPDATA%\\jev-2048\\credentials.env` on Windows. The prompt shows the exact path.
-macOS/Linux permissions are owner-only; Windows follows your user profile's ACLs.
-Do not share this file; delete it to forget the key. An exported `TYPESAFE_API_KEY` takes
-precedence, followed by the saved key and then `$JEV_REPO/.env`.
-Keys supplied through those existing sources are not copied.
-
-### Choose the interface
-
-```bash
-python3 start.py          # new dashboard only (default)
-python3 start.py --retro  # original 2048 window only, no dashboard
-```
-
-On Windows, use `py -3 start.py` or `py -3 start.py --retro`.
-The default dashboard at `http://127.0.0.1:8799/` shows the board, decisions and probabilities,
-with Pause, Step and speed controls. It renders live game state without screenshots.
-Both interfaces drive the same original game with the same Jev policy.
-For self-managed environments, `demo.py` follows the same default and accepts `--retro`.
-The old demo flags `--headless` and `--no-dashboard` are replaced by this interface choice;
-`run.py` and `benchmark.py` retain their own options.
-
-### Subsequent launches
-
-Run the **same command**, `python3 start.py`, from the repository root. Existing dependencies,
-Chromium and the Jev client are reused; no activation or `export` is needed if you saved
-the key. If you declined to save it, enter it again or provide it through the environment.
-
-### Setup without playing
-
-```bash
-python3 start.py --setup-only
-```
-
-This installs/checks the environment without requesting a key or calling the model API.
-Python itself is not installed or changed. No global pip installs or automatic `sudo`
-commands are run. On Linux, missing browser system libraries may require an administrator;
-the launcher prints the command to run instead of installing them silently.
-
-Downloads require access to PyPI, GitHub and Playwright's browser distribution.
-Playing Jev also requires access to `api.typesafe.ai`. Setup checks local dependencies,
-**not** remote key validity or available API credit; authentication/network errors can
-still occur when the first decision is requested.
-
-Advanced: set `JEV_REPO` to use an existing client checkout, or `PLAYWRIGHT_BROWSERS_PATH`
-to reuse a browser cache. The launcher does not modify the supplied Jev checkout.
-`demo.py` remains available for an environment you manage yourself. Examples elsewhere
-using `python` assume that environment is active and the working directory is `jev-lab/`.
-`demo.py` starts/stops only its own game server; `run.py` and `benchmark.py` require a
-server that is already running.
-
-Example output (using a short step limit):
-
-```
-  game 1 finished: max_steps after 25 moves, score 56, max tile 8
-    best 56 (game 1, jev-board) · 1 played · avg 56 · 256+ 0/1
-  game 2 finished: max_steps after 25 moves, score 112, max tile 16
-    best 112 (game 2, jev-features) · 2 played · avg 84 · 256+ 0/2
-```
-
-### Stop it
-
-Press **Ctrl-C in the terminal** to stop and print a summary. In `--retro` mode, closing
-the game window also stops the demo. Closing the dashboard tab **does not** stop the
-background game. An interrupted game keeps the moves it actually made in its log.
-
-### Then try
-
-```bash
-python3 start.py --mode jev-board              # the failure case: one direction, forever
-python3 start.py --mode jev-features --speed 1 # slow down to read each decision
-python3 start.py --mode jev-state,jev-features # alternate modes
-python3 start.py --mode random                # no API key or Jev client needed
-python3 start.py --max-steps 0                 # let every game run to its own end
-```
-
-### What to expect
-
-Pace, so nothing looks broken: the model takes ~350 ms per move, and an illegal move costs
-another ~350 ms while the harness waits for a page that will not change. So a `jev-features`
-game of ~250 moves runs about three minutes; `jev-board` never dies on its own and only ends
-at `--max-steps`. `--speed 1` is for watching one decision; `--speed max` is for leaving it on
-in the background.
-
-Two things about what you see on screen:
-
-* **No screenshots by default.** The new dashboard draws directly from game state, so it
-  does not need a screenshot mirror. `--shots` explicitly enables the mirror in dashboard
-  mode; `--no-shots` disables it. Retro mode has no dashboard and takes no screenshots,
-  preserving the fix for the per-move flashing observed with visible-window capture.
-* **No white flash between games either.** Every game is a fresh navigation, and Chromium
-  paints its own default background — white — for the moment before a document has any style.
-  The session overrides that default to the game's own `#faf8ef` through CDP, so a reload
-  looks like the game rather than a white blink. Measured: a blank page renders
-  `(250, 248, 239)` instead of `(255, 255, 255)`.
-
-Use `--retro` when you want only the original game window instead of the dashboard.
 
 ---
 
@@ -754,8 +665,8 @@ experiment recovered it.
 
 ## 12. Requirements
 
-Everything the lab imports beyond the standard library, and why it is needed. The commands
-that install and configure all of it are in §0.
+The lab's dependencies are listed below. Installation paths, credential management and
+advanced options are at the end of this section.
 
 * **`playwright`** plus Chromium (`playwright install chromium`) — the browser session. The
   game is driven through a real browser, so there is no lighter path.
@@ -784,3 +695,29 @@ with a live, screenshot-free dashboard; Pause and Step worked. `--retro` played 
 Chromium with no dashboard listener, even with a saved dashboard pause command. Both modes
 exited 0 on Ctrl-C and stopped their owned servers. The stale-pause regression is covered by
 `game-test/test_demo_controls.py`.
+
+### Installation and configuration details
+
+- The launcher installs dependencies in the project's `.venv/` and downloads Chromium and
+  a pinned Jev client into `.jev/`. No local model weights are needed; ZIP users do not need Git.
+- To set up without playing: `python3 start.py --setup-only`, or `py -3 start.py --setup-only`
+  on Windows. This does not request a key or call the model API.
+- System Python is not changed. No global pip installs or automatic `sudo` commands are run.
+  Missing Linux system libraries produce instructions for an administrator.
+- Downloads require PyPI, GitHub and Playwright's browser distribution. Jev decisions require
+  `api.typesafe.ai`. Local checks do not validate remote credentials or available API credit.
+- Saving a key requires your consent. On macOS/Linux the default location is
+  `~/.config/jev-2048/credentials.env`; `XDG_CONFIG_HOME` overrides the configuration directory.
+  Windows uses `%LOCALAPPDATA%\jev-2048\credentials.env`. The prompt shows the exact path.
+  Permissions are owner-only on macOS/Linux; Windows follows your user profile's ACLs.
+  Do not share this plaintext file. Delete it to forget the saved key.
+- Credential precedence: exported `TYPESAFE_API_KEY`, saved key, then `$JEV_REPO/.env`.
+  Without a saved key, enter it again next time or supply it through the environment.
+- Set `JEV_REPO` to reuse your own client checkout or `PLAYWRIGHT_BROWSERS_PATH` to reuse
+  a browser cache. The launcher does not modify the supplied Jev checkout.
+- `--shots` enables an optional screenshot mirror in the dashboard. It is off by default;
+  retro mode takes no screenshots.
+- With a self-managed environment, run `demo.py` from `jev-lab/`: dashboard by default,
+  `--retro` for the original window. Other sections' `python` commands assume that directory
+  and an active environment with dependencies installed. `demo.py` manages its own game
+  server; `run.py` and `benchmark.py` require an already-running server.

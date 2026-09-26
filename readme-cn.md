@@ -2,6 +2,39 @@
 
 # Jev-2048 — 用 2048 实测 Jev 能力边界的实验场
 
+看 Jev 自动玩 2048：默认打开新面板，也可以切换到复古游戏窗口。
+
+
+## 0. 快速开始
+
+1. 安装 [Python 3.10+](https://www.python.org/downloads/)，准备一个有效的 [TypeSafe API Key](https://typesafe.ai)。
+2. Fork 后下载代码并解压，或克隆自己的 fork。
+3. 在包含 `start.py` 的文件夹中打开终端，执行：
+
+| 想看哪个界面 | macOS / Linux | Windows |
+|---|---|---|
+| 新面板（默认） | `python3 start.py` | `py -3 start.py` |
+| 复古 2048 窗口 | `python3 start.py --retro` | `py -3 start.py --retro` |
+
+首次启动会自动安装依赖、下载浏览器和 Jev 客户端。等待完成后，按提示输入 API Key，
+输入时不显示字符。询问是否保存时，输入 `y` 可供下次使用；Key 会以明文保存在仓库外的本机配置目录。
+需要联网，API 调用可能产生费用。
+
+启动后 Jev 会自动开始，一局结束后继续下一局。默认的新面板地址是
+[http://127.0.0.1:8799/](http://127.0.0.1:8799/)。
+
+### 常用操作
+
+- **暂停、继续、单步、调速**：在新面板上操作。“单步”让 Jev 再走一步，目前不支持手动选方向。
+- **停止**：在终端按 `Ctrl-C`。复古模式也可以关闭游戏窗口；关闭新面板标签页不会停止后台游戏。
+- **下次启动**：执行同一条命令。环境会复用；保存过 Key 就不用再次输入。
+
+macOS 已实测；Windows/Linux 尚未实跑验证。安装位置、Key 管理等细节见 [环境要求](#12-环境要求)。
+
+---
+
+## 实验说明
+
 一个 harness 实验，不是 2048 bot。
 
 游戏是 Gabriele Cirulli 的上游 [2048](https://github.com/gabrielecirulli/2048)，MIT 许可，
@@ -36,121 +69,6 @@
 
 本仓库里没有任何地方预设了赢家。对比表是从日志生成的；如果某个 jev 模式输给了 `greedy`，
 表里就这么写。
-
----
-
-## 0. 快速开始
-
-### 下载代码，然后启动
-
-先安装 **Python 3.10+**（如尚未安装，可从 [python.org](https://www.python.org/downloads/) 获取）。
-Fork 本仓库后，克隆**你自己的 fork**，或下载 ZIP 并解压。
-在仓库根目录（包含 `start.py` 的目录）打开终端，执行：
-
-```bash
-python3 start.py
-```
-
-Windows 使用 `py -3 start.py`。需要桌面环境和网络连接。启动器会自动：
-
-1. 在项目内创建 `.venv/`，安装缺失的 Python 依赖。
-2. 将 Chromium 下载到 `.jev/browsers/`，检查浏览器能否启动。
-3. 将固定版本 `1231850a0bf1a0c0341fe408ef1668dbbfdfac46` 的 Jev 客户端下载到 `.jev/`。
-   **无需安装 Git，也无需下载本地模型权重。**
-4. 提示输入 **TypeSafe API Key**，输入内容不显示。有效 Key 需要自行从
-   [TypeSafe](https://typesafe.ai) 获取；调用 API 可能产生费用。
-5. 启动游戏服务器，**只打开新面板**，让 `jev-features` 连续玩。原版游戏运行在后台 Chromium
-   中，不再额外打开传统游戏窗口。
-
-保存 Key 前会询问你。输入 `y` 后，Key 以明文存入**仓库以外**的用户配置目录，避免被游戏的
-静态服务器公开：macOS/Linux 使用 `$XDG_CONFIG_HOME/jev-2048/credentials.env`
-（默认 `~/.config/jev-2048/credentials.env`），Windows 使用
-`%LOCALAPPDATA%\\jev-2048\\credentials.env`。提示中会显示实际路径。
-macOS/Linux 上仅文件所有者可访问，Windows 上遵循用户目录的 ACL 权限。
-不要分享此文件，删除它即可取消保存。凭据优先级为：环境变量 `TYPESAFE_API_KEY`、
-已保存的 Key、`$JEV_REPO/.env`。已有来源的 Key 不会被复制保存。
-
-### 选择界面
-
-```bash
-python3 start.py          # 默认：只打开新面板
-python3 start.py --retro  # 只打开复古 2048 窗口，不打开面板
-```
-
-Windows 对应使用 `py -3 start.py` 或 `py -3 start.py --retro`。
-新面板默认地址是 `http://127.0.0.1:8799/`，显示棋盘、决策和概率，并提供暂停、单步与调速。
-棋盘直接根据实时游戏状态绘制，不依赖截图。两种界面使用同一个原版游戏和 Jev 决策逻辑。
-自行管理环境时，`demo.py` 也采用相同默认行为并支持 `--retro`。
-原有 demo 参数 `--headless`、`--no-dashboard` 由这套界面选择替代；
-`run.py` 和 `benchmark.py` 的参数保持不变。
-
-### 下次启动
-
-仍在仓库根目录执行**同一条命令** `python3 start.py`。已有依赖、Chromium 和 Jev 客户端会被
-复用；如果保存了 Key，就不用激活虚拟环境，也不用再次 `export`。
-如果上次拒绝保存 Key，下次需重新输入或通过环境变量提供。
-
-### 只安装环境，不开始游戏
-
-```bash
-python3 start.py --setup-only
-```
-
-此命令安装并检查环境，不询问 Key，也不调用模型 API。
-启动器不会安装或修改系统 Python，不向全局安装 pip 包，也不会自动执行 `sudo`。
-Linux 如果缺浏览器系统库，可能需要管理员安装；启动器只提示命令，不会静默提权安装。
-
-下载需要访问 PyPI、GitHub 和 Playwright 浏览器分发站点；Jev 对局还需访问 `api.typesafe.ai`。
-环境检查**不代表远端 Key 有效或账户额度充足**；第一次请求决策时仍可能遇到鉴权或网络错误。
-
-高级用法：设置 `JEV_REPO` 可复用已有客户端目录，设置 `PLAYWRIGHT_BROWSERS_PATH` 可复用
-浏览器缓存。启动器不会修改你指定的 Jev 目录。
-自行管理环境时仍可直接运行 `demo.py`；本文其他章节里的 `python` 命令假定已激活该环境，
-且当前目录是 `jev-lab/`。`demo.py` 自动启动游戏服务器，并且只关闭自己启动的那个；
-`run.py` 和 `benchmark.py` 则要求服务器已经运行。
-
-输出示例（使用较短的步数上限）：
-
-```
-  game 1 finished: max_steps after 25 moves, score 56, max tile 8
-    best 56 (game 1, jev-board) · 1 played · avg 56 · 256+ 0/1
-  game 2 finished: max_steps after 25 moves, score 112, max tile 16
-    best 112 (game 2, jev-features) · 2 played · avg 84 · 256+ 0/2
-```
-
-### 怎么停
-
-在终端按 **Ctrl-C** 停止并打印汇总。使用 `--retro` 时，也可以直接关掉游戏窗口退出。
-**关闭新面板的标签页不会停止后台游戏**。中途被打断的一局会保留它实际走出的移动日志。
-
-### 接着可以试
-
-```bash
-python3 start.py --mode jev-board              # 一个方向反复走的失败案例
-python3 start.py --mode jev-features --speed 1 # 放慢速度，细看决策
-python3 start.py --mode jev-state,jev-features # 交替使用两种模式
-python3 start.py --mode random                # 无需 API Key 或 Jev 客户端
-python3 start.py --max-steps 0                 # 每局玩到自然结束
-```
-
-### 预期会看到什么
-
-速度说明，免得看起来像坏了：模型每步约 350 ms，一次非法移动还要再花约 350 ms，
-因为 harness 在等一个不会变化的页面。所以一局约 250 步的 `jev-features` 要跑大约三分钟；
-`jev-board` 自己永远不会死，只会在 `--max-steps` 处结束。`--speed 1` 用来细看某一次决策；
-`--speed max` 用来把它丢在后台一直跑。
-
-关于屏幕上看到的画面，有两点：
-
-* **默认不截图。** 新面板直接根据游戏状态绘制棋盘，不需要截图镜像。
-  `--shots` 可在面板模式显式开启镜像，`--no-shots` 则禁用它。
-  复古模式没有面板，也不会截图，保留此前针对可见窗口逐步截图闪烁问题的修复。
-* **局间也没有白闪。** 每局都是一次全新导航，而 Chromium 在文档还没有任何样式的那一刻，
-  会绘制它自己的默认背景 —— 白色。会话通过 CDP 把这个默认值改成游戏自己的 `#faf8ef`，
-  于是重新加载看起来就是游戏本身，而不是一道白光。实测：空白页面渲染出的是
-  `(250, 248, 239)`，而不是 `(255, 255, 255)`。
-
-只想看原版游戏窗口时，使用 `--retro` 替代默认的新面板。
 
 ---
 
@@ -700,7 +618,7 @@ heuristic 一局走 404 步，其中 10% 摸到 1024，而 jev 各模式要么�
 
 ## 12. 环境要求
 
-lab 在标准库之外导入的东西，以及各自为什么需要。安装和配置它们的命令都在 §0。
+以下列出 lab 的依赖；安装位置、凭据管理和高级参数见本节末尾。
 
 * **`playwright`** 加 Chromium（`playwright install chromium`）—— 浏览器会话。游戏是通过
   真实浏览器驱动的，没有更轻的路子。
@@ -724,3 +642,25 @@ Jev 客户端，并用这套安装完成真实的可见 Jev 对局。同时验�
 无截图，暂停和单步可用；`--retro` 打开可见原版窗口，不启动面板服务，也不会受旧面板的
 暂停指令影响。两种模式均在 Ctrl-C 后以退出码 0 退出并关闭自行启动的服务器。
 `game-test/test_demo_controls.py` 覆盖了旧暂停指令导致复古模式停住的回归问题。
+
+### 安装与配置细节
+
+- 启动器在项目内的 `.venv/` 安装依赖，在 `.jev/` 下载浏览器和固定版本的 Jev 客户端。
+  不需要本地模型权重；下载 ZIP 的用户也不需要 Git。
+- 只搭建环境、不开始游戏：`python3 start.py --setup-only`；Windows 使用 `py -3 start.py --setup-only`。
+  此命令不询问 Key，也不调用模型 API。
+- 不修改系统 Python，不全局安装 pip 包，不自动执行 `sudo`。Linux 缺系统库时会提示管理员安装命令。
+- 下载需访问 PyPI、GitHub 和 Playwright 浏览器分发站点；Jev 决策需访问 `api.typesafe.ai`。
+  本地环境检查不验证远端 Key 是否有效或额度是否充足。
+- 保存 Key 前会询问。macOS/Linux 默认保存在 `~/.config/jev-2048/credentials.env`，
+  可通过 `XDG_CONFIG_HOME` 指定配置目录；Windows 使用 `%LOCALAPPDATA%\jev-2048\credentials.env`。
+  提示中会显示实际路径。macOS/Linux 权限仅限文件所有者，Windows 遵循用户目录的 ACL 权限。
+  不要分享这个明文文件，删除它即可取消保存。
+- 凭据优先级：环境变量 `TYPESAFE_API_KEY`、已保存的 Key、`$JEV_REPO/.env`。
+  未保存时，下次需重新输入或通过环境变量提供。
+- 设置 `JEV_REPO` 可复用自己的客户端目录，设置 `PLAYWRIGHT_BROWSERS_PATH` 可复用浏览器缓存。
+  启动器不会修改指定的 Jev 目录。
+- `--shots` 可为新面板开启截图镜像，默认关闭；复古模式不截图。
+- 自行管理环境时，可在 `jev-lab/` 运行 `demo.py`，默认新面板，`--retro` 启动复古界面。
+  本文其他章节的 `python` 命令假定已激活安装依赖的环境，并位于 `jev-lab/`。
+  `demo.py` 自动管理自己启动的游戏服务器，`run.py` 和 `benchmark.py` 需要先启动服务器。
