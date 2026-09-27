@@ -33,7 +33,9 @@ The default dashboard is at [http://127.0.0.1:8799/](http://127.0.0.1:8799/).
 - **Play yourself**: click *Play myself*, or just press an arrow key, and the panel waits for
   you. Arrow keys or W A S D play one move each, recorded like any other move, and Jev stops
   calling the model until you click *Jev plays*. Only the dashboard has controls; `--retro`
-  shows the game window and nothing else.
+  shows the game window and nothing else. Holding a direction repeats faster than the harness
+  can move, so a press that arrives while two are still waiting replaces the oldest of them
+  instead of piling up behind it.
 - **Language**: the panel follows your browser's language list. It is available in English and
   Chinese, and anything else falls back to English. The game window is the upstream game and
   keeps its own wording.
@@ -723,6 +725,12 @@ for six seconds with the status `waiting for you`, then three separate direction
 after the previous one had been played, produced exactly three moves recorded with
 `decision_source: human` and no repeats; switching back resumed the model. A panel keypress
 drove the same path, and the mode buttons and the key hint followed the state.
+
+Holding a direction was measured separately, because a held key repeats faster than the harness
+moves and every repeat that changes nothing costs a full timeout. Thirty auto-repeat keydowns
+used to queue thirty moves and the board kept moving for 10.2 seconds after the last one; with
+the queue bounded at two the same burst leaves the board moving for 1.55 s, and a deliberate
+sequence of eight presses still plays all eight.
 
 The panel's language was verified by loading it with a browser reporting `zh-CN`, `zh-TW`,
 `en-US` and `fr-FR`: Chinese for the first two, English for the other two, with the stats,

@@ -50,9 +50,11 @@ COMMANDS = {
     "auto": ("run", 0, False),
 }
 DIRECTIONS = ("up", "down", "left", "right")
-# A backstop only: the queue is pruned against the runner's own consumed counter, so in
-# normal use it holds just the moves the human has pressed and the runner has not played yet.
-MAX_QUEUED_MOVES = 64
+# How many presses may wait for the game. Holding a direction repeats faster than the harness
+# can move, and a repeated direction that changes nothing costs a full timeout, so an unbounded
+# queue turns a held key into many seconds of movement after the human has stopped pressing.
+# Two absorbs a press that arrives while one is already in flight.
+MAX_PENDING_MOVES = 2
 STATIC_FILES = {
     "/dashboard.js": ("dashboard.js", "application/javascript; charset=utf-8"),
     "/dashboard.css": ("dashboard.css", "text/css; charset=utf-8"),
@@ -217,7 +219,9 @@ class _Handler(BaseHTTPRequestHandler):
             manual = True
             command, pending = "run", 0
             move_seq += 1
-            moves = (moves + [{"seq": move_seq, "direction": requested_direction}])[-MAX_QUEUED_MOVES:]
+            # A keypress that arrives faster than the game can move replaces the oldest one
+            # still waiting, so the board tracks the keyboard instead of trailing it.
+            moves = (moves + [{"seq": move_seq, "direction": requested_direction}])[-MAX_PENDING_MOVES:]
 
         requested_speed = body.get("speed")
         if requested_speed is not None:

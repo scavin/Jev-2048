@@ -13,7 +13,7 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "jev-lab"))
 
 from runner.interactive import InteractiveHook, reset_control_file
-from ui.dashboard import Dashboard
+from ui.dashboard import MAX_PENDING_MOVES, Dashboard
 
 
 def write(path, payload):
@@ -67,6 +67,29 @@ class MoveSequenceTest(unittest.TestCase):
                         post(url, body)
                     caught.exception.close()
                 self.assertFalse(control.exists(), "a rejected request wrote the control file")
+            finally:
+                board.stop()
+
+
+    def test_a_burst_of_presses_cannot_pile_up(self):
+        # Holding a direction repeats faster than the harness moves, and a repeated direction
+        # that changes nothing costs a full timeout: an unbounded queue then plays for seconds
+        # after the human stopped pressing.
+        with tempfile.TemporaryDirectory() as directory:
+            control = Path(directory) / "control.json"
+            state = Path(directory) / "live_state.json"
+            board = Dashboard(port=0, state_path=str(state), control_path=str(control),
+                              screenshot_path=str(Path(directory) / "live.jpg"))
+            url = board.start()
+            try:
+                write(state, {"moves_done": 0})
+                for _ in range(12):
+                    response = post(url, {"direction": "left"})
+                pending = response["moves"]
+                self.assertLessEqual(len(pending), MAX_PENDING_MOVES)
+                self.assertEqual([move["direction"] for move in pending],
+                                 ["left"] * len(pending))
+                self.assertEqual(pending[-1]["seq"], response["move_seq"])
             finally:
                 board.stop()
 
